@@ -222,3 +222,23 @@ test('overview counts requests waiting for the person', async () => {
   assert.equal(o.waitingYou, 1);
   assert.equal(o.inProgress, 0);
 });
+
+test('client confirms the team proposal through the portal, then work can start', async () => {
+  const { Contracts } = await import('../src/contract.js');
+  const { createApp } = await import('../src/app.js');
+  const store = new Contracts();
+  const app = createApp({ store, hooks: null, slack: null });
+  const who = { role: 'human', agent: 'ana@acme.com' };
+  const call = (path, body) => app.handle(new Request('http://x' + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}), who).then((r) => r.json());
+  const p = await call('/api/portal/requests', { title: 'Painel', description: 'x', criteria: ['mostra vendas'] });
+  assert.equal(p.proposal, null);
+  const dev = { role: 'dev', agent: 'd' };
+  store.propose(p.id, { estimate: { hours: 10 }, plan: 'planilha + painel' }, dev);
+  store.agree(p.id, { version: 2 }, dev);
+  const seen = await call(`/api/portal/requests/${p.id}`);
+  assert.match(seen.proposal.text, /até \d+ dias? \(85% de chance\)/);
+  assert.match(seen.proposal.text, /planilha \+ painel/);
+  const ok = await call(`/api/portal/requests/${p.id}/confirm`, {});
+  assert.equal(ok.status.code, 'agreed');
+  assert.equal(ok.proposal, null);
+});

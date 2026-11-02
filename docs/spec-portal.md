@@ -51,6 +51,7 @@ O usuário do portal age como `client` ao pedir/aceitar e como `human` ao decidi
 | GET | `/api/portal/requests/:id` | | `ClientView & { timeline: {at, text}[] }` |
 | POST | `/api/portal/requests` | `{ title, description, criteria?: string[], templateId?, budgetBrl? }` | `ClientView` |
 | POST | `/api/portal/requests/:id/decision` | `{ decision: "approve"\|"renegotiate"\|"cancel" }` | `ClientView` |
+| POST | `/api/portal/requests/:id/confirm` | `{ version? }` | `ClientView` (cliente confirma a proposta do time) |
 | POST | `/api/portal/requests/:id/accept` | | `ClientView` |
 | POST | `/api/portal/requests/:id/reject` | `{ reason }` | `ClientView` |
 | POST | `/api/portal/import` | `{ format: "jira"\|"linear"\|"trello"\|"generic", csv, hoursPerPoint? }` | `ImportResult` |

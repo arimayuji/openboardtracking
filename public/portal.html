@@ -639,6 +639,14 @@ table.skipped th { color: var(--muted); font-weight: 600; }
           }).join('') + '</div></div>';
       }
 
+      var proposal = '';
+      if (r.proposal) {
+        proposal = '<div class="decision-box" role="region" aria-label="Proposta do time">' +
+          '<p><strong>Proposta do time</strong></p><p>' + esc(r.proposal.text) + '</p>' +
+          '<div class="btn-row"><button type="button" data-action="confirm" data-id="' + esc(r.id) +
+          '" data-version="' + esc(r.proposal.version) + '">Confirmar e começar</button></div></div>';
+      }
+
       var accept = '';
       if (r.canAccept) {
         accept = '<div class="panel"><h3>A entrega está pronta para você</h3>' +
@@ -666,7 +674,7 @@ table.skipped th { color: var(--muted); font-weight: 600; }
             '<span>Criado em ' + esc(dateBr(r.createdAt)) + '</span><span>Gasto: ' + esc(money(r.spent)) + '</span></p>' +
           (r.forecast && r.forecast.text ? '<p class="forecast"><strong>Previsão:</strong> ' + esc(r.forecast.text) + '</p>' : '') +
         '</article>' +
-        decision +
+        decision + proposal +
         accept +
         '<div class="panel"><h3>Critérios de pronto</h3>' +
           (criteria ? '<ul class="checklist">' + criteria + '</ul>' : '<p class="empty">Nenhum critério definido.</p>') +
@@ -811,6 +819,13 @@ table.skipped th { color: var(--muted); font-weight: 600; }
       return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/decision', {
         method: 'POST', body: { decision: decision }
       }), 'Decisão registrada.');
+    }
+
+    if (action === 'confirm') {
+      el.disabled = true;
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/confirm', {
+        method: 'POST', body: { version: Number(el.getAttribute('data-version')) }
+      }), 'Proposta confirmada. O trabalho pode começar.');
     }
 
     if (action === 'accept') {

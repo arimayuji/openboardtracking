@@ -99,6 +99,13 @@ export function portalRoutes(store) {
       return clientView(store, store.createIntent(intent, client(actor)));
     })],
 
+    // Client confirms the team's current proposal (estimate and plan) so work can start.
+    ['POST', /^\/api\/portal\/requests\/(\w+)\/confirm$/, route(([id], body, actor) => {
+      const c = store.get(id);
+      store.agree(id, { version: body.version ?? c.proposal.version }, client(actor));
+      return clientView(store, store.get(id));
+    })],
+
     ['POST', /^\/api\/portal\/requests\/(\w+)\/decision$/, route(([id], body, actor) => {
       store.resolve(id, { decision: body.decision }, decider(actor));
       return clientView(store, store.get(id));

@@ -9,6 +9,7 @@ import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './in
 import { calibration, calibrate, forecast } from './estimate.js';
 import { proxyFetch } from './usage-proxy.js';
 import { portalRoutes } from './portal.js';
+import { createMcp } from './mcp.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), {
   status,
@@ -78,11 +79,18 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
     ['GET', /^\/api\/summary$/, (_, q) => store.summary(Number(q.get?.('hours') ?? 24))],
   ];
 
+  // MCP tools call this same handle with the same actor; /mcp itself is never a tool.
+  const mcp = createMcp(handle);
+
   async function handle(request, actor) {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
       if (path.startsWith('/proxy/')) return await proxyFetch(store, request, { fetchImpl, env });
+      if (path === '/mcp') {
+        if (request.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST' } });
+        return await mcp.handle(request, actor);
+      }
 
       for (const [method, re, fn] of integrations) {
         const m = path.match(re);

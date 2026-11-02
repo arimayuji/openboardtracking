@@ -57,10 +57,33 @@ export function clientView(store, contract) {
     forecast: forecast == null ? null : { text: forecast },
     needsDecision: c.state === 'escalated' ? decisionFor(c.escalation?.reason ?? '') : null,
     canAccept: c.state === 'delivered',
+    proposal: proposalFor(store, c),
     criteria: (c.proposal?.criteria ?? []).map((k) => ({
       text: k.text,
       done: c.verified?.[k.id] === true || c.delivery?.results?.[k.id] === true,
     })),
+  };
+}
+
+// The dev side proposed estimate and plan; the client must confirm it before work starts.
+function proposalFor(store, c) {
+  const p = c.proposal;
+  if (c.state !== 'negotiating' || p?.by !== 'dev' || !p.estimate || !Object.keys(p.estimate).length) return null;
+  if (c.agreedBy?.includes('client')) return null;
+  const hours = p.calibrated?.hours?.p85 ?? p.estimate.hours;
+  const parts = [];
+  if (hours != null) {
+    const days = Math.max(1, Math.ceil(hours / 8));
+    parts.push(`prazo estimado de até ${days} ${days === 1 ? 'dia' : 'dias'} (85% de chance)`);
+  }
+  const usd = p.calibrated?.costUsd?.p85 ?? p.estimate.costUsd;
+  if (usd != null) {
+    const brl = toBrl(store, usd);
+    parts.push(brl != null ? `custo previsto de até R$ ${brl.toFixed(2).replace('.', ',')}` : `custo previsto de até US$ ${usd}`);
+  }
+  return {
+    version: p.version,
+    text: `O time propôs: ${parts.join(' e ') || 'começar o trabalho'}.${p.plan ? ` Como: ${p.plan}` : ''} Confirme para começar.`,
   };
 }
 
