@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenBoardTracking</title>
+<style>
+  :root { --bg:#0f1115; --col:#181b22; --card:#232733; --fg:#e6e6e6; --muted:#8a90a0; --acc:#5b8cff; --warn:#ff7a59; }
+  * { box-sizing:border-box } body { margin:0; font:14px system-ui; background:var(--bg); color:var(--fg) }
+  header { padding:12px 16px } h1 { font-size:18px; margin:0 } header p { color:var(--muted); margin:4px 0 0 }
+  #board { display:grid; grid-template-columns:repeat(7,minmax(170px,1fr)); gap:10px; padding:0 16px 16px; overflow-x:auto }
+  .col { background:var(--col); border-radius:8px; padding:8px; min-height:60vh }
+  .col.escalated { outline:1px solid var(--warn) }
+  .col h2 { font-size:12px; text-transform:uppercase; color:var(--muted); margin:4px 4px 8px }
+  .card { background:var(--card); border-radius:6px; padding:8px; margin-bottom:8px; cursor:pointer }
+  .meta { color:var(--muted); font-size:12px; margin-top:4px }
+  .reason { color:var(--warn); font-size:12px; margin-top:4px }
+  button { font:inherit; font-size:12px; padding:3px 8px; margin:6px 4px 0 0; border:0; border-radius:4px; background:var(--acc); color:#fff; cursor:pointer }
+  #side { padding:0 16px 16px; color:var(--muted); white-space:pre-wrap; font:12px monospace }
+</style>
+</head>
+<body>
+<header>
+  <h1>OpenBoardTracking</h1>
+  <p>Agente do cliente ⇄ agente do dev. Humanos só entram quando há escalonamento.</p>
+  <p id="fc"></p>
+</header>
+<div id="board"></div>
+<pre id="side"></pre>
+<script>
+const STATES = ['negotiating','agreed','building','delivered','escalated','accepted','rejected'];
+const api = (p, o={}) => fetch('/api'+p, { ...o, headers:{'content-type':'application/json','x-role':'human','x-agent':'web'} }).then(r=>r.json());
+async function render() {
+  const cs = await api('/contracts');
+  board.innerHTML = STATES.map(s => `<div class="col ${s}"><h2>${s} (${cs.filter(c=>c.state===s).length})</h2>
+    ${cs.filter(c=>c.state===s).map(c=>`<div class="card" onclick="detail('${c.id}')">
+      ${esc(c.title)}
+      <div class="meta">v${c.proposal.version} · ${c.proposal.criteria.length} critérios</div>
+      <div class="meta">${fmtEst(c.proposal)}</div>
+      <div class="meta">gasto: ${c.usage.hours}h · ${fmtTok(c.usage.tokens)} tok · $${c.usage.costUsd}</div>
+      ${c.escalation ? `<div class="reason">${esc(c.escalation.reason)}</div>
+        <button onclick="event.stopPropagation();resolve('${c.id}','approve')">Aprovar</button>
+        <button onclick="event.stopPropagation();resolve('${c.id}','renegotiate')">Renegociar</button>
+        <button onclick="event.stopPropagation();resolve('${c.id}','cancel')">Cancelar</button>` : ''}
+    </div>`).join('')}</div>`).join('');
+}
+const UNIT = { hours: 'h', tokens: ' tok', costUsd: ' USD' };
+const fmtTok = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? Math.round(n/1e3)+'k' : n;
+const fmtVal = (m, v) => m === 'tokens' ? fmtTok(v) + UNIT[m] : v + UNIT[m];
+const fmtEst = p => Object.entries(p.calibrated ?? {}).map(([m, e]) => `${fmtVal(m, e.raw)} → P85 ${fmtVal(m, e.p85)}`).join(' · ') || 'sem estimativa';
+async function renderForecast() {
+  const f = await api('/forecast'), s = await api('/summary');
+  const parts = Object.entries(f.metrics).map(([m, x]) => `${m}: P50 ${fmtVal(m, x.remaining.p50)} / P85 ${fmtVal(m, x.remaining.p85)}`);
+  fc.textContent = (parts.length ? `Falta consumir · ${parts.join(' · ')}` : 'Sem estimativas abertas') +
+    (s.costPerAcceptedUsd != null ? ` · custo por entrega aceita: $${s.costPerAcceptedUsd}` : '') + (f.note ? ' · (mínimo)' : '');
+}
+async function resolve(id, decision) {
+  const r = await api(`/contracts/${id}/resolve`, { method:'POST', body:JSON.stringify({decision}) });
+  if (r.error) alert(r.error); render();
+}
+async function detail(id) {
+  const [c, h] = await Promise.all([api('/contracts/'+id), api(`/contracts/${id}/history`)]);
+  side.textContent = JSON.stringify({ contract:c, history:h.map(e=>`${e.at} ${e.role}/${e.agent} ${e.type} ${JSON.stringify(e.data)}`) }, null, 2);
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tick = () => { render(); renderForecast(); };
+tick(); setInterval(tick, 5000);
+</script>
+</body>
+</html>
