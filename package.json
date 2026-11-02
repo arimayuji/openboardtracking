@@ -1,0 +1,8 @@
+{
+  "name": "openboardtracking",
+  "version": "0.1.0",
+  "description": "Kanban AI-native: agentes e humanos puxam tarefas por API, rituais viram dados.",
+  "type": "module",
+  "scripts": { "start": "node src/server.js", "test": "node --test" },
+  "license": "MIT"
+}
