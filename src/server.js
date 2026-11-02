@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { Contracts } from './contract.js';
+import { calibration, calibrate, forecast } from './estimate.js';
 
 const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
 const html = new URL('../public/index.html', import.meta.url);
@@ -20,6 +21,9 @@ const routes = [
   ['POST', /^\/api\/contracts\/(\w+)\/reject$/, ([id], b, a) => store.reject(id, b, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/escalate$/, ([id], b, a) => store.escalate(id, b, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/resolve$/, ([id], b, a) => store.resolve(id, b, a)],
+  ['GET', /^\/api\/forecast$/, (_, q) => forecast(store, { parallel: Number(q.get('parallel') ?? 1) })],
+  ['GET', /^\/api\/calibration$/, () => calibration(store)],
+  ['GET', /^\/api\/calibrate$/, (_, q) => calibrate(store, Number(q.get('hours')), q.get('agent') ?? undefined)],
   ['GET', /^\/api\/summary$/, (_, q) => store.summary(Number(q.get?.('hours') ?? 24))],
 ];
 

@@ -3,6 +3,7 @@
 // path (escalation), not the bridge.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { calibrate } from './estimate.js';
 
 export const ROLES = ['client', 'dev', 'human'];
 export const STATES = ['negotiating', 'agreed', 'building', 'delivered', 'accepted', 'rejected', 'escalated'];
@@ -79,7 +80,10 @@ export class Contracts {
       if (criteria) p.criteria = normCriteria(criteria);
     } else {
       if (criteria) throw httpError(403, 'dev cannot change acceptance criteria; send a message to contest them');
-      if (estimateHours !== undefined) p.estimateHours = Number(estimateHours);
+      if (estimateHours !== undefined) {
+        p.estimateHours = Number(estimateHours);
+        p.calibrated = calibrate(this, p.estimateHours, actor.agent);
+      }
       if (plan !== undefined) p.plan = plan;
     }
     p.version += 1;
@@ -88,8 +92,10 @@ export class Contracts {
     c.agreedBy = [];
     c.rounds += 1;
     this.log('proposal', c, actor, { version: p.version, message });
-    if (c.budgetHours != null && p.estimateHours > c.budgetHours)
-      return this.escalateInternal(c, `estimate ${p.estimateHours}h exceeds budget ${c.budgetHours}h`);
+    // Budget is checked against the calibrated P85, not the raw guess.
+    const risk = p.calibrated?.p85 ?? p.estimateHours;
+    if (c.budgetHours != null && risk > c.budgetHours)
+      return this.escalateInternal(c, `P85 estimate ${risk}h (raw ${p.estimateHours}h) exceeds budget ${c.budgetHours}h`);
     if (c.rounds > MAX_ROUNDS)
       return this.escalateInternal(c, `no agreement after ${MAX_ROUNDS} rounds`);
     this.save();
@@ -117,16 +123,19 @@ export class Contracts {
     this.guard(c, 'start', actor);
     c.state = 'building';
     c.assignee = actor.agent;
+    c.startedAt = now();
     this.log('start', c, actor);
     this.save();
     return c;
   }
 
   // Dev delivers with evidence for each criterion (e.g. test results, PR url).
-  deliver(id, { results = {}, links = [] }, actor) {
+  // actualHours: effort reported by the dev; falls back to wall-clock since start.
+  deliver(id, { results = {}, links = [], actualHours }, actor) {
     const c = this.get(id);
     this.guard(c, 'deliver', actor);
-    c.delivery = { results, links, at: now() };
+    const wall = (Date.now() - Date.parse(c.startedAt ?? c.updatedAt)) / 3600e3;
+    c.delivery = { results, links, at: now(), actualHours: actualHours != null ? Number(actualHours) : +wall.toFixed(2) };
     c.state = 'delivered';
     this.log('deliver', c, actor, { links });
     this.save();

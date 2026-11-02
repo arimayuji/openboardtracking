@@ -22,6 +22,7 @@
 <header>
   <h1>OpenBoardTracking</h1>
   <p>Agente do cliente ⇄ agente do dev. Humanos só entram quando há escalonamento.</p>
+  <p id="fc"></p>
 </header>
 <div id="board"></div>
 <pre id="side"></pre>
@@ -33,12 +34,17 @@ async function render() {
   board.innerHTML = STATES.map(s => `<div class="col ${s}"><h2>${s} (${cs.filter(c=>c.state===s).length})</h2>
     ${cs.filter(c=>c.state===s).map(c=>`<div class="card" onclick="detail('${c.id}')">
       ${esc(c.title)}
-      <div class="meta">v${c.proposal.version} · ${c.proposal.estimateHours ?? '?'}h · ${c.proposal.criteria.length} critérios</div>
+      <div class="meta">v${c.proposal.version} · ${c.proposal.estimateHours ?? '?'}h${c.proposal.calibrated ? ` (P85 ${c.proposal.calibrated.p85}h)` : ''} · ${c.proposal.criteria.length} critérios</div>
       ${c.escalation ? `<div class="reason">${esc(c.escalation.reason)}</div>
         <button onclick="event.stopPropagation();resolve('${c.id}','approve')">Aprovar</button>
         <button onclick="event.stopPropagation();resolve('${c.id}','renegotiate')">Renegociar</button>
         <button onclick="event.stopPropagation();resolve('${c.id}','cancel')">Cancelar</button>` : ''}
     </div>`).join('')}</div>`).join('');
+}
+async function renderForecast() {
+  const f = await api('/forecast');
+  fc.textContent = `Previsão do que está aberto: P50 ${f.effortHours.p50}h · P85 ${f.effortHours.p85}h · P95 ${f.effortHours.p95}h de esforço` +
+    (f.unestimated.length ? ` · ${f.unestimated.length} sem estimativa (mínimo)` : '');
 }
 async function resolve(id, decision) {
   const r = await api(`/contracts/${id}/resolve`, { method:'POST', body:JSON.stringify({decision}) });
@@ -49,7 +55,8 @@ async function detail(id) {
   side.textContent = JSON.stringify({ contract:c, history:h.map(e=>`${e.at} ${e.role}/${e.agent} ${e.type} ${JSON.stringify(e.data)}`) }, null, 2);
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-render(); setInterval(render, 5000);
+const tick = () => { render(); renderForecast(); };
+tick(); setInterval(tick, 5000);
 </script>
 </body>
 </html>

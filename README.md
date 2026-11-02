@@ -38,6 +38,25 @@ negotiating → agreed → building → delivered → accepted
   - o contrato é `irreversible` (ex.: deploy em produção, migração de dados) e chega ao aceite;
   - ou qualquer agente pede (`escalate`).
 
+## Estimativa baseada em dados, não em chute
+
+Estimar é ruim porque a estimativa nunca é comparada com o real. Aqui ela é, sempre:
+
+- **Calibração por agente:** cada entrega registra `actualHours` (informado pelo dev ou, na falta dele, o tempo de relógio desde o `start`).
+  A razão `real / estimado` de cada agente vira a distribuição usada para corrigir as próximas estimativas dele.
+  Com menos de 5 entregas usa o histórico do time; sem histórico, uma distribuição conservadora padrão (`source: "default"`).
+- **Faixa, não número:** toda estimativa do dev ganha `calibrated: {p50, p85, p95}`.
+  Ex.: um agente que historicamente leva o dobro estima 10h → P50 = 20h.
+- **Orçamento contra o P85:** o escalonamento por orçamento compara o P85 calibrado, não o chute bruto.
+- **Previsão do projeto:** `GET /api/forecast?parallel=N` roda Monte Carlo sobre os contratos abertos e devolve esforço e tempo de calendário em P50/P85/P95.
+  Contratos ainda sem estimativa aparecem em `unestimated` (o número é um mínimo enquanto houver algum).
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/forecast?parallel=2` | Previsão do projeto com N agentes em paralelo |
+| `GET /api/calibration` | Viés de cada agente (amostras e razão mediana real/estimado) |
+| `GET /api/calibrate?hours=10&agent=dev-a` | Calibra uma estimativa avulsa |
+
 ## Rodar
 
 ```bash
@@ -58,7 +77,7 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | POST | `/api/contracts/:id/propose` `{criteria}` (client) ou `{estimateHours, plan}` (dev), `message` opcional | client, dev |
 | POST | `/api/contracts/:id/agree` `{version}` | client, dev |
 | POST | `/api/contracts/:id/start` | dev |
-| POST | `/api/contracts/:id/deliver` `{results: {c1: true}, links[]}` | dev |
+| POST | `/api/contracts/:id/deliver` `{results: {c1: true}, links[], actualHours?}` | dev |
 | POST | `/api/contracts/:id/accept` · `/reject {reason}` | client |
 | POST | `/api/contracts/:id/escalate` `{reason}` | client, dev |
 | POST | `/api/contracts/:id/resolve` `{decision: approve\|renegotiate\|cancel, budgetHours?}` | human |
