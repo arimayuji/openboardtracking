@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { Contracts, pickMetrics } from './contract.js';
+import { flow } from './flow.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 
 const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
@@ -25,6 +26,9 @@ const routes = [
   ['GET', /^\/api\/forecast$/, (_, q) => forecast(store, { parallel: Number(q.get('parallel') ?? 1) })],
   ['GET', /^\/api\/calibration$/, () => calibration(store)],
   ['GET', /^\/api\/calibrate$/, (_, q) => calibrate(store, pickMetrics(Object.fromEntries(q)), q.get('agent') ?? undefined)],
+  ['GET', /^\/api\/flow$/, (_, q) => flow(store, { days: Number(q.get('days') ?? 7) })],
+  ['GET', /^\/api\/config$/, () => store.config],
+  ['POST', /^\/api\/config$/, (_, b, a) => store.updateConfig(b, a)],
   ['GET', /^\/api\/summary$/, (_, q) => store.summary(Number(q.get?.('hours') ?? 24))],
 ];
 

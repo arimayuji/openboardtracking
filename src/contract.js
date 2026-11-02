@@ -12,6 +12,19 @@ export const STATES = ['negotiating', 'agreed', 'building', 'delivered', 'accept
 export const METRICS = ['hours', 'tokens', 'costUsd'];
 export const MAX_ROUNDS = 5;
 
+// Organization-wide settings, owned by humans.
+// wip: limits on work in progress. For agents the scarce resources are
+//   parallel execution and human attention, so escalations also count.
+// dod: Definition of Done applied to every contract on top of the client's
+//   criteria. Snapshotted per contract when it is created.
+export const DEFAULT_CONFIG = {
+  wip: { building: 5, perAgent: 2, escalated: 3 },
+  dod: [
+    { id: 'dod-tests', text: 'automated tests pass' },
+    { id: 'dod-security', text: 'no known vulnerabilities introduced' },
+  ],
+};
+
 // action -> roles allowed and states it can run from
 const RULES = {
   propose:  { roles: ['client', 'dev'], from: ['negotiating'] },
@@ -26,10 +39,26 @@ const RULES = {
 };
 
 export class Contracts {
-  constructor(file = null) {
+  constructor(file = null, config = {}) {
     this.file = file;
-    this.state = { contracts: [], events: [] };
+    this.state = { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
     if (file && existsSync(file)) this.state = JSON.parse(readFileSync(file, 'utf8'));
+    this.state.config ??= structuredClone(DEFAULT_CONFIG);
+  }
+
+  get config() { return this.state.config; }
+
+  // Only humans change organization rules.
+  updateConfig({ wip, dod }, actor) {
+    if (actor.role !== 'human') throw httpError(403, 'only human can change wip limits or definition of done');
+    if (wip) this.config.wip = { ...this.config.wip, ...wip };
+    if (dod) {
+      if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
+      this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
+    }
+    this.state.events.push({ id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod }, at: now() });
+    this.save();
+    return this.config;
   }
 
   save() { if (this.file) writeFileSync(this.file, JSON.stringify(this.state, null, 2)); }
@@ -65,6 +94,7 @@ export class Contracts {
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
       state: 'negotiating', rounds: 0,
+      dod: structuredClone(this.config.dod),
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },
       usage: emptyUsage(), agreedBy: [], delivery: null, escalation: null, createdAt: now(), updatedAt: now(),
     };
@@ -124,12 +154,26 @@ export class Contracts {
   start(id, actor) {
     const c = this.get(id);
     this.guard(c, 'start', actor);
+    this.checkWip(actor.agent);
     c.state = 'building';
     c.assignee = actor.agent;
     c.startedAt = now();
     this.log('start', c, actor);
     this.save();
     return c;
+  }
+
+  // Pulling new work is blocked while the system is saturated:
+  // too much in execution, too much on one agent, or humans with a backlog of escalations.
+  checkWip(agent) {
+    const { building, perAgent, escalated } = this.config.wip;
+    const inBuild = this.list({ state: 'building' });
+    if (building != null && inBuild.length >= building) throw httpError(409, `WIP limit: ${building} contracts already building`);
+    if (perAgent != null && inBuild.filter((c) => c.assignee === agent).length >= perAgent)
+      throw httpError(409, `WIP limit: agent ${agent} already has ${perAgent} contracts building`);
+    const esc = this.list({ state: 'escalated' }).length;
+    if (escalated != null && esc >= escalated)
+      throw httpError(409, `WIP limit: ${esc} escalations waiting for humans; resolve them before starting new work`);
   }
 
   // Dev agent reports consumption while it works (increments).
@@ -164,10 +208,13 @@ export class Contracts {
   accept(id, actor) {
     const c = this.get(id);
     this.guard(c, 'accept', actor);
-    const failing = c.proposal.criteria.filter((k) => c.delivery?.results?.[k.id] !== true).map((k) => k.id);
+    // Client criteria and the organization's Definition of Done must all pass.
+    const checks = [...c.proposal.criteria, ...(c.dod ?? [])];
+    const failing = checks.filter((k) => c.delivery?.results?.[k.id] !== true).map((k) => k.id);
     if (failing.length) throw httpError(409, `criteria not passing: ${failing.join(', ')}`);
     if (c.irreversible) return this.escalateInternal(c, 'irreversible change requires human approval', 'accept');
     c.state = 'accepted';
+    c.acceptedAt = now();
     this.log('accept', c, actor);
     this.save();
     return c;
@@ -203,7 +250,7 @@ export class Contracts {
     this.guard(c, 'resolve', actor);
     const { fromState, pending } = c.escalation;
     if (decision === 'approve') {
-      if (pending === 'accept') c.state = 'accepted';
+      if (pending === 'accept') { c.state = 'accepted'; c.acceptedAt = now(); }
       else if (fromState === 'negotiating') { c.state = 'agreed'; c.agreedBy = ['client', 'dev']; }
       else c.state = fromState;
     } else if (decision === 'renegotiate') {

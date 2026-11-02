@@ -29,11 +29,12 @@
 <script>
 const STATES = ['negotiating','agreed','building','delivered','escalated','accepted','rejected'];
 const api = (p, o={}) => fetch('/api'+p, { ...o, headers:{'content-type':'application/json','x-role':'human','x-agent':'web'} }).then(r=>r.json());
+let stale = new Set();
 async function render() {
   const cs = await api('/contracts');
   board.innerHTML = STATES.map(s => `<div class="col ${s}"><h2>${s} (${cs.filter(c=>c.state===s).length})</h2>
     ${cs.filter(c=>c.state===s).map(c=>`<div class="card" onclick="detail('${c.id}')">
-      ${esc(c.title)}
+      ${esc(c.title)}${stale.has(c.id) ? ' <span class="reason">parado</span>' : ''}
       <div class="meta">v${c.proposal.version} · ${c.proposal.criteria.length} critérios</div>
       <div class="meta">${fmtEst(c.proposal)}</div>
       <div class="meta">gasto: ${c.usage.hours}h · ${fmtTok(c.usage.tokens)} tok · $${c.usage.costUsd}</div>
@@ -48,10 +49,13 @@ const fmtTok = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? Math.round(n/
 const fmtVal = (m, v) => m === 'tokens' ? fmtTok(v) + UNIT[m] : v + UNIT[m];
 const fmtEst = p => Object.entries(p.calibrated ?? {}).map(([m, e]) => `${fmtVal(m, e.raw)} → P85 ${fmtVal(m, e.p85)}`).join(' · ') || 'sem estimativa';
 async function renderForecast() {
-  const f = await api('/forecast'), s = await api('/summary');
+  const [f, s, fl] = await Promise.all([api('/forecast'), api('/summary'), api('/flow')]);
+  stale = new Set(fl.stale);
   const parts = Object.entries(f.metrics).map(([m, x]) => `${m}: P50 ${fmtVal(m, x.remaining.p50)} / P85 ${fmtVal(m, x.remaining.p85)}`);
   fc.textContent = (parts.length ? `Falta consumir · ${parts.join(' · ')}` : 'Sem estimativas abertas') +
-    (s.costPerAcceptedUsd != null ? ` · custo por entrega aceita: $${s.costPerAcceptedUsd}` : '') + (f.note ? ' · (mínimo)' : '');
+    (s.costPerAcceptedUsd != null ? ` · custo por entrega aceita: $${s.costPerAcceptedUsd}` : '') + (f.note ? ' · (mínimo)' : '') +
+    ` · em execução ${fl.wip.building}/${fl.limits.building} · escalonados ${fl.wip.escalated}/${fl.limits.escalated}` +
+    (fl.cycleTimeHours.samples ? ` · cycle time P85 ${fl.cycleTimeHours.p85}h` : '') + ` · ${fl.throughput.perDay}/dia`;
 }
 async function resolve(id, decision) {
   const r = await api(`/contracts/${id}/resolve`, { method:'POST', body:JSON.stringify({decision}) });

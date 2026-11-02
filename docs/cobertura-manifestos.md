@@ -11,7 +11,7 @@ Fontes:
 
 Legenda: ✅ coberto · 🟡 parcial · ❌ não coberto · ➖ não se aplica (problema deixou de existir)
 
-Estado avaliado: `main` após o PR #1.
+Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 
 ## 1. Manifesto Ágil: valores
 
@@ -34,7 +34,7 @@ Estado avaliado: `main` após o PR #1.
 | 6 | Conversa face a face é o meio mais eficiente | 🟡 | Substituída por negociação estruturada e log auditável. Falta conversa livre (ver valor 1). |
 | 7 | Software funcionando é a principal medida de progresso | ✅ | `accepted` e custo por entrega aceita. |
 | 8 | Ritmo sustentável | ✅ | Reinterpretado como orçamento: horas, tokens e custo, com escalonamento ao estourar. |
-| 9 | Atenção contínua à excelência técnica e bom design | ❌ | Nada garante qualidade além dos critérios do cliente. Falta *Definition of Done* global (testes, lint, segurança, revisão) aplicada a todo contrato. |
+| 9 | Atenção contínua à excelência técnica e bom design | 🟡 | DoD global aplicada a todo contrato, definida só por humanos. Ainda autodeclarada pelo dev até a plataforma rodar os checks. |
 | 10 | Simplicidade: maximizar o trabalho não feito | ❌ | Nada desestimula escopo desnecessário. Ideia: o agente do dev pode propor cortar critérios de baixo valor; mostrar custo por critério. |
 | 11 | Melhores arquiteturas e requisitos vêm de times auto-organizados | ✅ | O agente do dev é dono do plano e da arquitetura; o cliente não pode interferir. |
 | 12 | Em intervalos regulares, o time reflete e ajusta o comportamento | 🟡 | Calibração das estimativas é um ajuste automático. Falta aprender com **rejeições, escalonamentos e retrabalho** (retrospectiva automática). |
@@ -77,7 +77,7 @@ Estado avaliado: `main` após o PR #1.
 | Product Goal | ❌ | Não há objetivo de produto acima dos contratos. Contratos soltos sem direção comum. |
 | Sprint Backlog / Sprint Goal | ➖ | Sem sprint. O papel de foco é feito pelo plano de cada contrato. |
 | Increment | 🟡 | Cada contrato aceito é um incremento. Falta garantir que ele é **integrável e utilizável** junto com os outros (release, integração). |
-| Definition of Done | 🟡 | Critérios por contrato existem. Falta DoD global da organização (ver princípio 9). |
+| Definition of Done | ✅ | DoD global (`/api/config`), copiada para cada contrato na criação, exigida no aceite. |
 | Refinamento do backlog | ❌ | Não há decomposição de intents grandes nem fatiamento. |
 
 ## 4. Kanban
@@ -85,8 +85,8 @@ Estado avaliado: `main` após o PR #1.
 | Prática / conceito | Status | Observação |
 |---|---|---|
 | Visualizar o fluxo | ✅ | Painel por estado do contrato. |
-| Limitar o trabalho em andamento (WIP) | ❌ | **Regressão**: tínhamos limite de WIP no MVP e ele saiu quando trocamos para contratos. Para agentes, o limite real é orçamento e capacidade de revisão humana; precisa voltar como limite de contratos em `building`/`escalated`. |
-| Gerir o fluxo ativamente | 🟡 | Previsão Monte Carlo cobre o futuro. Faltam as métricas de fluxo: cycle time, throughput e **idade do trabalho em andamento** (itens parados). Também saíram com a troca. |
+| Limitar o trabalho em andamento (WIP) | ✅ | Limite global e por agente em `building`, mais limite de escalonamentos pendentes (atenção humana). |
+| Gerir o fluxo ativamente | ✅ | `/api/flow`: cycle time, lead time, throughput, WIP por estado e idade dos itens com alerta de parados. |
 | Políticas explícitas | ✅ | Tabela de regras por papel e estado, aplicada pelo sistema. |
 | Ciclos de feedback | 🟡 | Aceite, rejeição e escalonamento. Falta revisão periódica do fluxo (ver retrospectiva). |
 | Melhorar colaborativamente e evoluir experimentalmente | ❌ | Mesmo gap da retrospectiva. |
@@ -100,8 +100,8 @@ Estado avaliado: `main` após o PR #1.
 
 **Gaps reais, por prioridade sugerida:**
 
-1. **Limite de WIP e métricas de fluxo** (cycle time, throughput, idade dos itens). Regressão nossa; fácil de recuperar.
-2. **Definition of Done global**: checks de qualidade aplicados a todo contrato, além dos critérios do cliente.
+1. ~~Limite de WIP e métricas de fluxo~~ (resolvido no PR #2)
+2. ~~Definition of Done global~~ (resolvido no PR #2; ainda autodeclarada)
 3. **Retrospectiva automática**: aprender com rejeições, escalonamentos e estouros de orçamento, e propor ajustes.
 4. **Mudança de escopo durante a execução** (*change request* em `building`), sem precisar rejeitar ou escalar.
 5. **Product Goal e refinamento**: objetivo acima dos contratos, decomposição de intents grandes e dependências.
