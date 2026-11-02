@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { Contracts } from './contract.js';
+import { Contracts, pickMetrics } from './contract.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 
 const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
@@ -16,6 +16,7 @@ const routes = [
   ['POST', /^\/api\/contracts\/(\w+)\/propose$/, ([id], b, a) => store.propose(id, b, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/agree$/, ([id], b, a) => store.agree(id, b, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/start$/, ([id], _, a) => store.start(id, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/usage$/, ([id], b, a) => store.reportUsage(id, b, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/deliver$/, ([id], b, a) => store.deliver(id, b, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/accept$/, ([id], _, a) => store.accept(id, a)],
   ['POST', /^\/api\/contracts\/(\w+)\/reject$/, ([id], b, a) => store.reject(id, b, a)],
@@ -23,7 +24,7 @@ const routes = [
   ['POST', /^\/api\/contracts\/(\w+)\/resolve$/, ([id], b, a) => store.resolve(id, b, a)],
   ['GET', /^\/api\/forecast$/, (_, q) => forecast(store, { parallel: Number(q.get('parallel') ?? 1) })],
   ['GET', /^\/api\/calibration$/, () => calibration(store)],
-  ['GET', /^\/api\/calibrate$/, (_, q) => calibrate(store, Number(q.get('hours')), q.get('agent') ?? undefined)],
+  ['GET', /^\/api\/calibrate$/, (_, q) => calibrate(store, pickMetrics(Object.fromEntries(q)), q.get('agent') ?? undefined)],
   ['GET', /^\/api\/summary$/, (_, q) => store.summary(Number(q.get?.('hours') ?? 24))],
 ];
 

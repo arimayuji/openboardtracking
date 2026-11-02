@@ -34,17 +34,24 @@ async function render() {
   board.innerHTML = STATES.map(s => `<div class="col ${s}"><h2>${s} (${cs.filter(c=>c.state===s).length})</h2>
     ${cs.filter(c=>c.state===s).map(c=>`<div class="card" onclick="detail('${c.id}')">
       ${esc(c.title)}
-      <div class="meta">v${c.proposal.version} · ${c.proposal.estimateHours ?? '?'}h${c.proposal.calibrated ? ` (P85 ${c.proposal.calibrated.p85}h)` : ''} · ${c.proposal.criteria.length} critérios</div>
+      <div class="meta">v${c.proposal.version} · ${c.proposal.criteria.length} critérios</div>
+      <div class="meta">${fmtEst(c.proposal)}</div>
+      <div class="meta">gasto: ${c.usage.hours}h · ${fmtTok(c.usage.tokens)} tok · $${c.usage.costUsd}</div>
       ${c.escalation ? `<div class="reason">${esc(c.escalation.reason)}</div>
         <button onclick="event.stopPropagation();resolve('${c.id}','approve')">Aprovar</button>
         <button onclick="event.stopPropagation();resolve('${c.id}','renegotiate')">Renegociar</button>
         <button onclick="event.stopPropagation();resolve('${c.id}','cancel')">Cancelar</button>` : ''}
     </div>`).join('')}</div>`).join('');
 }
+const UNIT = { hours: 'h', tokens: ' tok', costUsd: ' USD' };
+const fmtTok = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? Math.round(n/1e3)+'k' : n;
+const fmtVal = (m, v) => m === 'tokens' ? fmtTok(v) + UNIT[m] : v + UNIT[m];
+const fmtEst = p => Object.entries(p.calibrated ?? {}).map(([m, e]) => `${fmtVal(m, e.raw)} → P85 ${fmtVal(m, e.p85)}`).join(' · ') || 'sem estimativa';
 async function renderForecast() {
-  const f = await api('/forecast');
-  fc.textContent = `Previsão do que está aberto: P50 ${f.effortHours.p50}h · P85 ${f.effortHours.p85}h · P95 ${f.effortHours.p95}h de esforço` +
-    (f.unestimated.length ? ` · ${f.unestimated.length} sem estimativa (mínimo)` : '');
+  const f = await api('/forecast'), s = await api('/summary');
+  const parts = Object.entries(f.metrics).map(([m, x]) => `${m}: P50 ${fmtVal(m, x.remaining.p50)} / P85 ${fmtVal(m, x.remaining.p85)}`);
+  fc.textContent = (parts.length ? `Falta consumir · ${parts.join(' · ')}` : 'Sem estimativas abertas') +
+    (s.costPerAcceptedUsd != null ? ` · custo por entrega aceita: $${s.costPerAcceptedUsd}` : '') + (f.note ? ' · (mínimo)' : '');
 }
 async function resolve(id, decision) {
   const r = await api(`/contracts/${id}/resolve`, { method:'POST', body:JSON.stringify({decision}) });
