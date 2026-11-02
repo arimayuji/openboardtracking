@@ -124,6 +124,30 @@ curl -XPOST localhost:3000/api/config -H 'content-type: application/json' -H 'x-
   -d '{"verifiedOnly":["dod-tests","dod-security"],"github":{"checks":{"CodeQL":"dod-security"}}}'
 ```
 
+### Slack
+
+Variáveis: `SLACK_BOT_TOKEN` (envio) e `SLACK_SIGNING_SECRET` (toda chamada vinda do Slack tem a assinatura verificada; sem ele, as rotas recusam tudo).
+
+No app do Slack:
+- **Bot token scopes:** `chat:write` e `channels:history` (mais `groups:history` para canais privados).
+- **Event Subscriptions:** URL `POST /api/integrations/slack/events`, evento `message.channels` (e `message.groups`).
+- **Interactivity:** URL `POST /api/integrations/slack/interactions`.
+- Convide o bot para os canais.
+
+Configuração (só `human`):
+
+```bash
+curl -XPOST localhost:3000/api/config -H 'content-type: application/json' -H 'x-role: human' \
+  -d '{"slack":{"channel":"C0NOTIFY","intakeChannels":["C0BUGS"],"approvers":["U0LEAD"],"digestHourUtc":12}}'
+```
+
+- **Escalonamentos** chegam em `channel` com botões *Aprovar*, *Renegociar* e *Cancelar*. Só os ids em `approvers` conseguem decidir; lista vazia = ninguém decide pelo Slack. A decisão fica no log como `slack:<id do usuário>`.
+- **Incidentes** abertos (ex.: alerta P1 do Datadog) são anunciados na hora.
+- **Canal de bugs:** mensagens de primeiro nível em `intakeChannels` viram bug e o bot responde na thread com o id do contrato.
+  Mensagens de bot, edições e respostas em thread são ignoradas; reenvios do Slack não contam duas vezes.
+- **Resumo diário** em `channel` na hora `digestHourUtc` (UTC): aceitos, bugs e incidentes, gasto, cycle time, decisões pendentes, parados e quick wins.
+  Também sob demanda: `POST /api/slack/digest` (só `human`).
+
 ## Trabalho não planejado: alertas e bugs viram trabalho rastreado
 
 Alerta de produção e bug reportado no chat não podem morrer numa conversa. Eles abrem contratos sozinhos,
@@ -222,6 +246,8 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | POST | `/api/integrations/github` (assinado pelo GitHub) | GitHub |
 | POST | `/api/intake/datadog` · `/api/intake/message` (header `x-obt-intake-token`) | integrações |
 | GET | `/api/quickwins?maxHours=2` | todos |
+| POST | `/api/integrations/slack/events` · `/api/integrations/slack/interactions` (assinados pelo Slack) | Slack |
+| POST | `/api/slack/digest` | human |
 | GET | `/api/calibrate?hours=10&tokens=200000&agent=dev-a` | todos |
 
 Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-manifestos.md).
@@ -232,7 +258,8 @@ Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-
 - Critérios de aceite viram testes executados pela plataforma (resultado deixa de ser autodeclarado)
 - Consumo coletado direto da API do provedor de modelo, sem depender do que o agente reporta
 - Calibração por tipo de trabalho (tags), não só por agente
-- Slack/Teams: escalonamentos com botões de decisão e resumo diário em canal
+- Teams, com o mesmo comportamento do Slack
+- Slack: registrar bug a partir de uma reação (ex.: :bug:) em qualquer canal
 - E-mail como fallback de notificação
 - Entrada de intents por issue, mensagem ou e-mail
 - GitLab e outros provedores de versionamento

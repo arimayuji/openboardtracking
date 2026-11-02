@@ -4,11 +4,14 @@ import { Contracts, pickMetrics } from './contract.js';
 import { flow } from './flow.js';
 import { Webhooks } from './webhooks.js';
 import { handleGithub, verifySignature } from './github.js';
+import { Slack, verifySlackSignature } from './slack.js';
 import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 
 const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
 const hooks = new Webhooks(store);
+const slack = new Slack(store);
+setInterval(() => slack.tick().catch((e) => console.error('digest failed:', e.message)), 10 * 60e3).unref();
 const html = new URL('../public/index.html', import.meta.url);
 
 // Actor identity: x-role (client | dev | human) + x-agent (free-form name).
@@ -16,6 +19,11 @@ const html = new URL('../public/index.html', import.meta.url);
 const routes = [
   ['POST', /^\/api\/integrations\/github$/, () => null], // handled above with the raw body
   ['POST', /^\/api\/intake\/(\w+)$/, () => null], // handled above with the intake token
+  ['POST', /^\/api\/integrations\/slack\/(events|interactions)$/, () => null], // handled above with the slack signature
+  ['POST', /^\/api\/slack\/digest$/, (_, __, a) => {
+    if (a.role !== 'human') throw Object.assign(new Error('only human can send the digest'), { status: 403 });
+    return slack.sendDigest();
+  }],
   ['GET', /^\/api\/quickwins$/, (_, q) => quickWins(store, { maxHours: Number(q.get('maxHours') ?? 2) })],
   ['GET', /^\/api\/contracts$/, (_, q) => store.list({ state: q.get('state') ?? undefined })],
   ['POST', /^\/api\/contracts$/, (_, b, a) => store.createIntent(b, a)],
@@ -65,6 +73,13 @@ const server = createServer(async (req, res) => {
         if (!handler) return send(404, { error: 'not found' });
         return send(200, handler(store, JSON.parse(raw || '{}')));
       }
+      if (url.pathname.startsWith('/api/integrations/slack/')) {
+        verifySlackSignature(raw, req.headers, process.env.SLACK_SIGNING_SECRET);
+        const result = url.pathname.endsWith('/events')
+          ? await slack.handleEvents(JSON.parse(raw))
+          : await slack.handleInteraction(JSON.parse(new URLSearchParams(raw).get('payload') ?? '{}'));
+        return send(200, result);
+      }
       if (url.pathname === '/api/integrations/github') {
         verifySignature(raw, req.headers['x-hub-signature-256'], process.env.GITHUB_WEBHOOK_SECRET);
         return send(200, handleGithub(store, req.headers['x-github-event'], JSON.parse(raw)));
@@ -72,7 +87,7 @@ const server = createServer(async (req, res) => {
       const body = raw ? JSON.parse(raw) : {};
       const actor = { role: req.headers['x-role'] ?? 'human', agent: req.headers['x-agent'] ?? 'anonymous' };
       const arg = method === 'GET' && m.length === 1 ? url.searchParams : body;
-      return send(200, fn(m.slice(1), arg, actor));
+      return send(200, await fn(m.slice(1), arg, actor));
     }
     send(404, { error: 'not found' });
   } catch (e) {
