@@ -262,6 +262,22 @@ Pessoas de RH, finanças, saúde, direito ou economia usam o **portal** (`/porta
 A página pública de apresentação fica em `/landing` (no Node) ou `/` (na Cloudflare).
 Modelos com dados pessoais aparecem marcados como LGPD; os de direito, como sigilosos.
 
+## Usar pelo próprio Claude (claude.ai ou Claude Code)
+
+A pessoa opera a plataforma **pelo plano dela do Claude**: o OpenBoardTracking é um servidor MCP remoto conectado ao Claude dela.
+A plataforma nunca pede nem guarda senha ou chave da Anthropic.
+
+- **Pessoas do cliente (claude.ai):** adicionam o conector personalizado com a URL `https://<seu-domínio>/mcp`, fazem login e clicam em *Permitir*.
+  Depois é só conversar ("Quero um relatório de turnover por área", "Como estão meus pedidos?").
+- **Time de dev (Claude Code):** `claude mcp add --transport http openboardtracking https://<seu-domínio>/t/<tenant>/mcp --header "Authorization: Bearer <token>"`,
+  ou o plugin: `/plugin marketplace add arimayuji/openboardtracking` e `/plugin install openboardtracking@openboardtracking`.
+- **Skills:** `ideia` (transforma uma ideia em pedido com critérios verificáveis), `acompanhar` (status, confirmar proposta, decidir, aprovar)
+  e `executar-contrato` (dev). Para o claude.ai, envie as pastas de `skills-claude-ai/`.
+- Ferramentas por papel: o cliente cria, acompanha, confirma propostas e aprova; o dev pega contratos, estima, executa e entrega.
+
+Passo a passo completo em [docs/conectar-claude.md](docs/conectar-claude.md); detalhes técnicos em [docs/spec-mcp.md](docs/spec-mcp.md).
+No Cloudflare Access, proteja `/authorize`, `/portal`, `/board` e `/api/*`; deixe `/mcp`, `/token`, `/register` e `/.well-known/*` públicos (eles têm autenticação própria).
+
 ## Importar histórico (estimativas calibradas desde o primeiro dia)
 
 Projetos e tarefas antigas viram contratos: os concluídos entram como entregues, com estimativa e tempo real,
@@ -278,11 +294,11 @@ e alimentam a calibração por pessoa (`/api/calibration`). Os em andamento entr
 Arquitetura: um Worker na frente, **um Durable Object por cliente** (dados isolados), login de pessoas pelo
 **Cloudflare Access** e tokens para agentes. Detalhes em [docs/spec-portal.md](docs/spec-portal.md).
 
-1. **Access**: em Zero Trust, crie uma aplicação self-hosted para o domínio do Worker protegendo `/portal`, `/board` e `/api/*`
-   (deixe `/`, `/t/*` de fora). Anote o *team domain* e o *AUD*, e preencha `ACCESS_TEAM_DOMAIN` e `ACCESS_AUD` no `wrangler.toml`.
+1. **Access**: em Zero Trust, crie uma aplicação self-hosted para o domínio do Worker protegendo `/portal`, `/board`, `/api/*` e `/authorize`
+   (deixe `/`, `/t/*`, `/mcp`, `/token`, `/register` e `/.well-known/*` de fora). Anote o *team domain* e o *AUD*, e preencha `ACCESS_TEAM_DOMAIN` e `ACCESS_AUD` no `wrangler.toml`.
 2. **Tenants** (secret `TENANTS`):
    ```json
-   { "acme": { "members": ["@acme.com"], "admins": ["ti@acme.com"],
+   { "acme": { "members": ["@acme.com"], "admins": ["ti@acme.com"], "devs": ["dev@acme.com"],
                "agentTokens": [{ "sha256": "<sha256 do token>", "role": "dev", "agent": "dev-1" }] } }
    ```
    `members` usam só o portal; `admins` acessam a API completa (configuração, DoD, preços, webhooks).

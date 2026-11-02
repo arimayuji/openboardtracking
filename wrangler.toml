@@ -24,9 +24,17 @@ html_handling = "none"
 name = "TENANT_BOARD"
 class_name = "TenantBoard"
 
+[[durable_objects.bindings]]
+name = "OAUTH_STORE"
+class_name = "OAuthStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["TenantBoard"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["OAuthStore"]
 
 [triggers]
 crons = ["*/10 * * * *"]

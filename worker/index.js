@@ -6,6 +6,9 @@ import { Webhooks } from '../src/webhooks.js';
 import { Slack } from '../src/slack.js';
 import { createApp } from '../src/app.js';
 import { authenticate, parseTenants, tenantsForEmail, safeEqual } from './auth.js';
+import { handleOAuth, bearerFromOAuth } from './oauth.js';
+
+export { OAuthStore } from './oauth.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), {
   status,
@@ -77,10 +80,35 @@ function isAdmin(tenantCfg, email) {
   return (tenantCfg?.admins ?? []).some((a) => String(a).toLowerCase() === e);
 }
 
+const mcpUnauthorized = (origin) => new Response(JSON.stringify({ error: 'unauthorized' }), {
+  status: 401,
+  headers: {
+    'content-type': 'application/json',
+    'www-authenticate': `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+  },
+});
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
   const isRead = request.method === 'GET' || request.method === 'HEAD';
+
+  // OAuth for the claude.ai connector (discovery, register, authorize, token).
+  const oauth = await handleOAuth(request, env, {
+    authenticateHuman: async (req) => {
+      const who = await authenticate(req, env);
+      if (who.kind !== 'human') throw Object.assign(new Error('login required'), { status: 401 });
+      return who;
+    },
+  });
+  if (oauth) return oauth;
+
+  // MCP server for the claude.ai connector: OAuth bearer token, tenant from the token.
+  if (path === '/mcp') {
+    const who = await bearerFromOAuth(request, env);
+    if (!who) return mcpUnauthorized(url.origin);
+    return forward(env, who.tenant, '/mcp', request, { role: who.role, agent: who.email, tenant: who.tenant });
+  }
 
   // Pages
   const page = PAGES[path];
@@ -107,7 +135,7 @@ async function route(request, env) {
   }
 
   // Agents: bearer token of one tenant.
-  const agent = path.match(/^\/t\/([^/]+)(\/(?:api|proxy)\/.*)$/);
+  const agent = path.match(/^\/t\/([^/]+)(\/(?:api|proxy)\/.*|\/mcp)$/);
   if (agent) {
     const [, tenant, rest] = agent;
     const who = await authenticate(request, env, { tenantId: tenant });
