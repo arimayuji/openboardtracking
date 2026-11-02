@@ -1,0 +1,37 @@
+name = "openboardtracking"
+main = "worker/index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (set with `wrangler secret put <NAME>`):
+#   TENANTS                 JSON with tenants, members and agentTokens (see docs/spec-portal.md)
+#   INTAKE_TOKEN            token for /t/<tenant>/api/intake/*
+#   GITHUB_WEBHOOK_SECRET   GitHub webhook signing secret
+#   SLACK_BOT_TOKEN         Slack bot token (xoxb-...)
+#   SLACK_SIGNING_SECRET    Slack request signing secret
+#   SENTRY_CLIENT_SECRET    Sentry client secret
+#   INTERNAL_SECRET         guards the internal /__tick call used by the cron trigger
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+# The Worker decides who sees each page, so it must run before static files are served.
+run_worker_first = true
+# Avoids redirects such as /portal.html -> /portal, which would loop through the Worker.
+html_handling = "none"
+
+[[durable_objects.bindings]]
+name = "TENANT_BOARD"
+class_name = "TenantBoard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TenantBoard"]
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+# Cloudflare Access: team domain (e.g. "acme.cloudflareaccess.com") and application audience tag.
+ACCESS_TEAM_DOMAIN = ""
+ACCESS_AUD = ""

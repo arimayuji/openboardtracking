@@ -247,6 +247,57 @@ Para testes, `ANTHROPIC_UPSTREAM_URL` e `OPENAI_UPSTREAM_URL` trocam o destino.
   desconta o que já foi gasto e devolve quanto falta consumir por métrica, além do tempo de calendário com N agentes em paralelo.
   Contratos sem estimativa aparecem em `unestimated` (o número é um mínimo enquanto houver algum).
 
+## Portal do Cliente (para quem não é técnico)
+
+Pessoas de RH, finanças, saúde, direito ou economia usam o **portal** (`/portal`), em português simples e sem jargão:
+
+- **Novo pedido** a partir de um modelo da área (RH, finanças, saúde, direito, economia) ou do zero, com a lista
+  "Como vamos saber que está pronto?" editável e orçamento em R$ (convertido pela cotação em `config.fx.usdToBrl`).
+- **Acompanhar**: status em linguagem simples ("Em produção", "Aguardando sua aprovação"), gasto, previsão
+  ("Boa chance de ficar pronto em até 3 dias (85%)") e linha do tempo.
+- **Decidir em um clique**: escalonamentos viram perguntas ("O custo previsto passou do orçamento combinado...").
+- **Aprovar a entrega** ou pedir ajustes.
+- **Início** com o valor entregue no mês: entregas, gasto, tempo médio.
+
+A página pública de apresentação fica em `/landing` (no Node) ou `/` (na Cloudflare).
+Modelos com dados pessoais aparecem marcados como LGPD; os de direito, como sigilosos.
+
+## Importar histórico (estimativas calibradas desde o primeiro dia)
+
+Projetos e tarefas antigas viram contratos: os concluídos entram como entregues, com estimativa e tempo real,
+e alimentam a calibração por pessoa (`/api/calibration`). Os em andamento entram como pedidos abertos.
+
+- Pelo portal, aba **Importar histórico**, ou `POST /api/portal/import` `{format, csv, hoursPerPoint?}`.
+- Formatos: exportação CSV do **Jira** (Original Estimate e Time Spent em segundos, ou Story Points),
+  **Linear** (Estimate em pontos), **Trello** (sem estimativa) e **planilha genérica**
+  (`title,status,estimate_hours,actual_hours,started_at,finished_at,assignee,kind`).
+- Pontos viram horas por `hoursPerPoint` (padrão 4). Sem tempo gasto, o real é calculado pelas datas em horas úteis.
+
+## Hospedar na Cloudflare
+
+Arquitetura: um Worker na frente, **um Durable Object por cliente** (dados isolados), login de pessoas pelo
+**Cloudflare Access** e tokens para agentes. Detalhes em [docs/spec-portal.md](docs/spec-portal.md).
+
+1. **Access**: em Zero Trust, crie uma aplicação self-hosted para o domínio do Worker protegendo `/portal`, `/board` e `/api/*`
+   (deixe `/`, `/t/*` de fora). Anote o *team domain* e o *AUD*, e preencha `ACCESS_TEAM_DOMAIN` e `ACCESS_AUD` no `wrangler.toml`.
+2. **Tenants** (secret `TENANTS`):
+   ```json
+   { "acme": { "members": ["@acme.com"], "admins": ["ti@acme.com"],
+               "agentTokens": [{ "sha256": "<sha256 do token>", "role": "dev", "agent": "dev-1" }] } }
+   ```
+   `members` usam só o portal; `admins` acessam a API completa (configuração, DoD, preços, webhooks).
+   Gere o hash de um token com `printf '%s' "$TOKEN" | sha256sum`.
+3. **Secrets**: `npx wrangler secret put TENANTS` e, conforme as integrações usadas,
+   `INTAKE_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SENTRY_CLIENT_SECRET`, `INTERNAL_SECRET`.
+4. **Deploy**: `npx wrangler deploy`.
+
+Rotas na Cloudflare:
+- Pessoas: `/portal`, `/board` (time técnico) e `/api/...` (com `?tenant=` se o e-mail estiver em mais de um cliente).
+- Agentes: `/t/<tenant>/api/...` e `/t/<tenant>/proxy/...` com `Authorization: Bearer <token>`.
+- Integrações (GitHub, Slack, Sentry, Datadog, mensagens): `/t/<tenant>/api/integrations/...` e `/t/<tenant>/api/intake/...`, validadas pela assinatura de cada uma.
+
+O resumo diário do Slack roda pelo cron do Worker (a cada 10 minutos ele verifica a hora configurada).
+
 ## Rodar
 
 ```bash
@@ -259,7 +310,7 @@ Zero dependências (Node 20+). O estado fica em `board.json` (`BOARD_FILE` muda 
 ## API
 
 O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-agent` (nome livre).
-> ⚠️ Identidade por header é só para uso local no MVP. É preciso autenticação real antes de expor.
+> ⚠️ No servidor Node, a identidade vem dos headers e serve só para uso local. Para expor, use o deploy na Cloudflare, com login real.
 
 | Método | Rota | Papel |
 |---|---|---|
@@ -300,4 +351,3 @@ Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-
 - E-mail como fallback de notificação
 - Entrada de intents por issue, mensagem ou e-mail
 - GitLab e outros provedores de versionamento
-- Autenticação real e multi-projeto

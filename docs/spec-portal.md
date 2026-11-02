@@ -33,10 +33,10 @@ TenantBoard: mantém Contracts em memória, persiste em ctx.storage, responde vi
 - **Tenant**: um Durable Object por cliente (isolamento total de dados).
 - **Configuração de tenants** (secret `TENANTS`, JSON):
   ```json
-  { "acme": { "members": ["ana@acme.com", "@acme.com"],
+  { "acme": { "members": ["ana@acme.com", "@acme.com"], "admins": ["ti@acme.com"],
               "agentTokens": [{ "sha256": "<hex do token>", "role": "dev", "agent": "dev-1" }] } }
   ```
-  `members` aceita e-mail exato ou domínio (`@acme.com`). Um e-mail pertencendo a mais de um tenant escolhe por `?tenant=`.
+  `members` aceita e-mail exato ou domínio (`@acme.com`) e só acessam `/api/portal/*`; `admins` (e-mails exatos) acessam a API completa do tenant. Um e-mail pertencendo a mais de um tenant escolhe por `?tenant=`.
 
 ## API do portal (`/api/portal/*`, só usuários humanos autenticados do tenant)
 

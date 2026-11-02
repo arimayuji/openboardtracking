@@ -35,6 +35,8 @@ export const DEFAULT_CONFIG = {
   // pricing: USD per million tokens, per model. Set by humans; no built-in prices,
   //   because they change. Models without a price are recorded with cost unknown.
   //   { "<model>": { input, output, cacheRead?, cacheWrite? } }
+  // fx: currency conversion for client-facing views, set by humans. { usdToBrl: number }
+  fx: { usdToBrl: null },
   usageSource: 'reported',
   pricing: {},
   wip: { building: 5, perAgent: 2, escalated: 3, expedite: 1 },
@@ -83,7 +85,7 @@ export class Contracts {
   get config() { return this.state.config; }
 
   // Only humans change organization rules.
-  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing }, actor) {
+  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx }, actor) {
     if (actor.role !== 'human') throw httpError(403, 'only human can change organization config');
     if (wip) this.config.wip = { ...this.config.wip, ...wip };
     if (verifiedOnly) this.config.verifiedOnly = [...verifiedOnly];
@@ -94,11 +96,12 @@ export class Contracts {
       this.config.usageSource = usageSource;
     }
     if (pricing) this.config.pricing = { ...this.config.pricing, ...pricing };
+    if (fx) this.config.fx = { ...this.config.fx, ...fx };
     if (dod) {
       if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
       this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
     }
-    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing }, at: now() };
+    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx }, at: now() };
     this.state.events.push(ev);
     this.emit(ev);
     this.save();
@@ -146,14 +149,14 @@ export class Contracts {
     return this.createContract(args, actor);
   }
 
-  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null }, actor) {
+  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null, area = null, sensitive = null }, actor) {
     if (!KINDS.includes(kind)) throw httpError(400, `kind must be one of ${KINDS.join(', ')}`);
     if (!CLASSES.includes(classOfService)) throw httpError(400, `classOfService must be one of ${CLASSES.join(', ')}`);
     if (!title) throw httpError(400, 'title is required');
     if (!criteria.length) throw httpError(400, 'at least one acceptance criterion is required');
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
-      kind, classOfService, source, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
+      kind, classOfService, source, area, sensitive, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
       state: 'negotiating', rounds: 0,
       dod: structuredClone(this.config.dod), links: [], verified: {},
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },

@@ -8,6 +8,7 @@ import { handleSentry, verifySentrySignature } from './sentry.js';
 import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 import { proxyFetch } from './usage-proxy.js';
+import { portalRoutes } from './portal.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), {
   status,
@@ -45,6 +46,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
 
   // Normal routes: fn(params, body-or-query, actor). GET routes without params get the query string.
   const routes = [
+    ...portalRoutes(store),
     ['POST', /^\/api\/slack\/digest$/, (_, __, a) => {
       if (a.role !== 'human') throw httpError(403, 'only human can send the digest');
       return slack.sendDigest();

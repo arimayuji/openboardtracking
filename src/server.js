@@ -12,7 +12,7 @@ const store = new Contracts(fileStore(process.env.BOARD_FILE ?? 'board.json'));
 const hooks = new Webhooks(store);
 const slack = new Slack(store);
 setInterval(() => slack.tick().catch((e) => console.error('digest failed:', e.message)), 10 * 60e3).unref();
-const html = new URL('../public/index.html', import.meta.url);
+const pages = new Map([['/', 'index.html'], ['/portal', 'portal.html'], ['/landing', 'landing.html']]);
 const app = createApp({ store, hooks, slack, env: process.env });
 
 // Actor identity: x-role (client | dev | human) + x-agent (free-form name).
@@ -20,9 +20,9 @@ const app = createApp({ store, hooks, slack, env: process.env });
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
-    if (req.method === 'GET' && url.pathname === '/') {
+    if (req.method === 'GET' && pages.has(url.pathname)) {
       res.writeHead(200, { 'content-type': 'text/html' });
-      return res.end(readFileSync(html));
+      return res.end(readFileSync(new URL(`../public/${pages.get(url.pathname)}`, import.meta.url)));
     }
 
     const headers = new Headers();
