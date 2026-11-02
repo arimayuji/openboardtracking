@@ -5,6 +5,7 @@ import { flow } from './flow.js';
 import { Webhooks } from './webhooks.js';
 import { handleGithub, verifySignature } from './github.js';
 import { Slack, verifySlackSignature } from './slack.js';
+import { handleSentry, verifySentrySignature } from './sentry.js';
 import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 
@@ -20,6 +21,7 @@ const routes = [
   ['POST', /^\/api\/integrations\/github$/, () => null], // handled above with the raw body
   ['POST', /^\/api\/intake\/(\w+)$/, () => null], // handled above with the intake token
   ['POST', /^\/api\/integrations\/slack\/(events|interactions)$/, () => null], // handled above with the slack signature
+  ['POST', /^\/api\/integrations\/sentry$/, () => null], // handled above with the sentry signature
   ['POST', /^\/api\/slack\/digest$/, (_, __, a) => {
     if (a.role !== 'human') throw Object.assign(new Error('only human can send the digest'), { status: 403 });
     return slack.sendDigest();
@@ -79,6 +81,10 @@ const server = createServer(async (req, res) => {
           ? await slack.handleEvents(JSON.parse(raw))
           : await slack.handleInteraction(JSON.parse(new URLSearchParams(raw).get('payload') ?? '{}'));
         return send(200, result);
+      }
+      if (url.pathname === '/api/integrations/sentry') {
+        verifySentrySignature(raw, req.headers['sentry-hook-signature'], process.env.SENTRY_CLIENT_SECRET);
+        return send(200, handleSentry(store, req.headers['sentry-hook-resource'], JSON.parse(raw)));
       }
       if (url.pathname === '/api/integrations/github') {
         verifySignature(raw, req.headers['x-hub-signature-256'], process.env.GITHUB_WEBHOOK_SECRET);
