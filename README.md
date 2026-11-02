@@ -93,6 +93,37 @@ Além dos critérios do cliente, todo contrato precisa passar na **Definition of
 - **WIP por estado** e os limites configurados;
 - **idade de cada contrato aberto** no estado atual, com `stale` para os que passaram do P85 do cycle time (ou 24h sem histórico).
 
+## Integrações
+
+### Webhooks de saída (base para chat, e-mail e outras ferramentas)
+
+Todo evento do log pode ser enviado para fora. Só `human` cadastra destinos, porque os dados saem da plataforma.
+
+```bash
+curl -XPOST localhost:3000/api/webhooks -H 'content-type: application/json' -H 'x-role: human' \
+  -d '{"url":"https://exemplo.com/hook","events":["escalated","deliver"],"secret":"<segredo>"}'
+```
+
+- `events`: tipos de evento (`intent`, `proposal`, `agreed`, `start`, `usage`, `deliver`, `accept`, `reject`, `escalated`, `resolve`, `link`, `verified`, `config`) ou `["*"]`.
+- Cada envio leva `x-obt-event`, `x-obt-delivery` e `x-obt-signature-256` (HMAC-SHA256 do corpo com o `secret`), e o corpo traz um resumo do contrato.
+- Envio assíncrono, 3 tentativas com espera crescente; os últimos 50 resultados ficam em `GET /api/webhooks/deliveries`.
+
+### GitHub
+
+Configure um webhook no repositório apontando para `POST /api/integrations/github`, com o segredo em `GITHUB_WEBHOOK_SECRET`
+(sem ele a rota recusa tudo) e os eventos *Pull requests*, *Check suites* e *Check runs*.
+
+- **Vínculo:** o PR pertence a um contrato quando a branch, o título ou o corpo contém `obt-<id do contrato>` (ex.: branch `obt-1a2b3c4d-login`).
+- **PR aberto ou atualizado:** vira evidência no contrato (`links`).
+- **CI concluído:** vira resultado **verificado**. O `check_suite` alimenta `config.github.suiteCheck` (padrão `dod-tests`); `check_run` alimenta o que estiver mapeado em `config.github.checks`, ex.: `{"CodeQL": "dod-security"}`.
+- **PR mergeado:** entrega o contrato automaticamente com os resultados verificados.
+- **Resultado verificado vence a declaração do dev.** Com `config.verifiedOnly: ["dod-tests"]`, esse check só conta se vier do CI.
+
+```bash
+curl -XPOST localhost:3000/api/config -H 'content-type: application/json' -H 'x-role: human' \
+  -d '{"verifiedOnly":["dod-tests","dod-security"],"github":{"checks":{"CodeQL":"dod-security"}}}'
+```
+
 ## Consumo: horas, tokens e custo
 
 O agente do dev reporta incrementos de consumo enquanto trabalha:
@@ -146,7 +177,9 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | GET | `/api/forecast?parallel=2` | todos |
 | GET | `/api/calibration` (viés de cada agente por métrica) | todos |
 | GET | `/api/flow?days=7` | todos |
-| GET · POST | `/api/config` `{wip?: {building, perAgent, escalated}, dod?: [texto ou {id, text}]}` | leitura: todos · escrita: human |
+| GET · POST | `/api/config` `{wip?, dod?, verifiedOnly?, github?: {suiteCheck, checks}}` | leitura: todos · escrita: human |
+| GET · POST | `/api/webhooks` `{url, events[], secret}` · `DELETE /api/webhooks/:id` · `GET /api/webhooks/deliveries` | leitura: todos · escrita: human |
+| POST | `/api/integrations/github` (assinado pelo GitHub) | GitHub |
 | GET | `/api/calibrate?hours=10&tokens=200000&agent=dev-a` | todos |
 
 Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-manifestos.md).
@@ -157,5 +190,8 @@ Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-
 - Critérios de aceite viram testes executados pela plataforma (resultado deixa de ser autodeclarado)
 - Consumo coletado direto da API do provedor de modelo, sem depender do que o agente reporta
 - Calibração por tipo de trabalho (tags), não só por agente
-- Integração com GitHub: PR e CI como evidência de entrega
+- Slack/Teams: escalonamentos com botões de decisão e resumo diário em canal
+- E-mail como fallback de notificação
+- Entrada de intents por issue, mensagem ou e-mail
+- GitLab e outros provedores de versionamento
 - Autenticação real e multi-projeto

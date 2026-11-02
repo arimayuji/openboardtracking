@@ -2,14 +2,18 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { Contracts, pickMetrics } from './contract.js';
 import { flow } from './flow.js';
+import { Webhooks } from './webhooks.js';
+import { handleGithub, verifySignature } from './github.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 
 const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
+const hooks = new Webhooks(store);
 const html = new URL('../public/index.html', import.meta.url);
 
 // Actor identity: x-role (client | dev | human) + x-agent (free-form name).
 // NOTE: header-based identity is for local MVP use only; add real auth before exposing it.
 const routes = [
+  ['POST', /^\/api\/integrations\/github$/, () => null], // handled above with the raw body
   ['GET', /^\/api\/contracts$/, (_, q) => store.list({ state: q.get('state') ?? undefined })],
   ['POST', /^\/api\/contracts$/, (_, b, a) => store.createIntent(b, a)],
   ['GET', /^\/api\/contracts\/(\w+)$/, ([id]) => store.get(id)],
@@ -29,6 +33,10 @@ const routes = [
   ['GET', /^\/api\/flow$/, (_, q) => flow(store, { days: Number(q.get('days') ?? 7) })],
   ['GET', /^\/api\/config$/, () => store.config],
   ['POST', /^\/api\/config$/, (_, b, a) => store.updateConfig(b, a)],
+  ['GET', /^\/api\/webhooks$/, () => hooks.list()],
+  ['POST', /^\/api\/webhooks$/, (_, b, a) => hooks.add(b, a)],
+  ['DELETE', /^\/api\/webhooks\/(\w+)$/, ([id], _, a) => hooks.remove(id, a)],
+  ['GET', /^\/api\/webhooks\/deliveries$/, () => hooks.deliveries()],
   ['GET', /^\/api\/summary$/, (_, q) => store.summary(Number(q.get?.('hours') ?? 24))],
 ];
 
@@ -48,6 +56,10 @@ const server = createServer(async (req, res) => {
       if (req.method !== method || !m) continue;
       let raw = '';
       for await (const chunk of req) raw += chunk;
+      if (url.pathname === '/api/integrations/github') {
+        verifySignature(raw, req.headers['x-hub-signature-256'], process.env.GITHUB_WEBHOOK_SECRET);
+        return send(200, handleGithub(store, req.headers['x-github-event'], JSON.parse(raw)));
+      }
       const body = raw ? JSON.parse(raw) : {};
       const actor = { role: req.headers['x-role'] ?? 'human', agent: req.headers['x-agent'] ?? 'anonymous' };
       const arg = method === 'GET' && m.length === 1 ? url.searchParams : body;

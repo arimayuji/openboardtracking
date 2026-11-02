@@ -17,7 +17,12 @@ export const MAX_ROUNDS = 5;
 //   parallel execution and human attention, so escalations also count.
 // dod: Definition of Done applied to every contract on top of the client's
 //   criteria. Snapshotted per contract when it is created.
+// verifiedOnly: check ids (criteria or DoD) that only count when confirmed by an
+//   integration (e.g. CI), never by the dev agent's own claim.
+// github: how CI results map to check ids.
 export const DEFAULT_CONFIG = {
+  verifiedOnly: [],
+  github: { suiteCheck: 'dod-tests', checks: {} },
   wip: { building: 5, perAgent: 2, escalated: 3 },
   dod: [
     { id: 'dod-tests', text: 'automated tests pass' },
@@ -43,20 +48,36 @@ export class Contracts {
     this.file = file;
     this.state = { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
     if (file && existsSync(file)) this.state = JSON.parse(readFileSync(file, 'utf8'));
-    this.state.config ??= structuredClone(DEFAULT_CONFIG);
+    this.state.config = { ...structuredClone(DEFAULT_CONFIG), ...this.state.config };
+    this.listeners = [];
+  }
+
+  // Integrations subscribe here to every event (outbound webhooks, chat, email).
+  onEvent(fn) { this.listeners.push(fn); }
+
+  emit(ev) {
+    const c = ev.contractId ? this.state.contracts.find((x) => x.id === ev.contractId) : null;
+    const payload = { ...ev, contract: c ? { id: c.id, title: c.title, state: c.state, assignee: c.assignee ?? null } : null };
+    for (const fn of this.listeners) {
+      try { fn(payload); } catch (e) { console.error('event listener failed:', e.message); }
+    }
   }
 
   get config() { return this.state.config; }
 
   // Only humans change organization rules.
-  updateConfig({ wip, dod }, actor) {
-    if (actor.role !== 'human') throw httpError(403, 'only human can change wip limits or definition of done');
+  updateConfig({ wip, dod, verifiedOnly, github }, actor) {
+    if (actor.role !== 'human') throw httpError(403, 'only human can change organization config');
     if (wip) this.config.wip = { ...this.config.wip, ...wip };
+    if (verifiedOnly) this.config.verifiedOnly = [...verifiedOnly];
+    if (github) this.config.github = { ...this.config.github, ...github };
     if (dod) {
       if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
       this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
     }
-    this.state.events.push({ id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod }, at: now() });
+    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github }, at: now() };
+    this.state.events.push(ev);
+    this.emit(ev);
     this.save();
     return this.config;
   }
@@ -64,8 +85,10 @@ export class Contracts {
   save() { if (this.file) writeFileSync(this.file, JSON.stringify(this.state, null, 2)); }
 
   log(type, c, actor, data = {}) {
-    this.state.events.push({ id: randomUUID(), type, contractId: c.id, role: actor.role, agent: actor.agent, data, at: now() });
+    const ev = { id: randomUUID(), type, contractId: c.id, role: actor.role, agent: actor.agent, data, at: now() };
+    this.state.events.push(ev);
     c.updatedAt = now();
+    this.emit(ev);
   }
 
   get(id) {
@@ -94,7 +117,7 @@ export class Contracts {
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
       state: 'negotiating', rounds: 0,
-      dod: structuredClone(this.config.dod),
+      dod: structuredClone(this.config.dod), links: [], verified: {},
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },
       usage: emptyUsage(), agreedBy: [], delivery: null, escalation: null, createdAt: now(), updatedAt: now(),
     };
@@ -210,7 +233,13 @@ export class Contracts {
     this.guard(c, 'accept', actor);
     // Client criteria and the organization's Definition of Done must all pass.
     const checks = [...c.proposal.criteria, ...(c.dod ?? [])];
-    const failing = checks.filter((k) => c.delivery?.results?.[k.id] !== true).map((k) => k.id);
+    // A verified result (from CI or another integration) always wins over the dev's claim.
+    const passes = (k) => {
+      const verified = c.verified?.[k.id];
+      if (this.config.verifiedOnly.includes(k.id)) return verified === true;
+      return (verified ?? c.delivery?.results?.[k.id]) === true;
+    };
+    const failing = checks.filter((k) => !passes(k)).map((k) => k.id);
     if (failing.length) throw httpError(409, `criteria not passing: ${failing.join(', ')}`);
     if (c.irreversible) return this.escalateInternal(c, 'irreversible change requires human approval', 'accept');
     c.state = 'accepted';
@@ -263,6 +292,40 @@ export class Contracts {
     if (budget) c.budget = { ...c.budget, ...pickMetrics(budget) };
     this.log('resolve', c, actor, { decision, budget });
     c.escalation = null;
+    this.save();
+    return c;
+  }
+
+  // ---- Integration operations (role "integration", never exposed to agents) ----
+
+  attachLink(id, link, actor) {
+    const c = this.get(id);
+    c.links ??= [];
+    const i = c.links.findIndex((l) => l.url === link.url);
+    if (i >= 0) c.links[i] = { ...c.links[i], ...link };
+    else c.links.push(link);
+    this.log('link', c, actor, link);
+    this.save();
+    return c;
+  }
+
+  setVerified(id, checkId, ok, source, actor) {
+    const c = this.get(id);
+    c.verified ??= {};
+    c.verified[checkId] = ok;
+    this.log('verified', c, actor, { check: checkId, ok, source });
+    this.save();
+    return c;
+  }
+
+  // Merge of a linked PR delivers the contract, with verified results as evidence.
+  autoDeliver(id, { links = [] }, actor) {
+    const c = this.get(id);
+    if (c.state !== 'building') return c;
+    if (!c.usage.hours) c.usage.hours = Math.round(((Date.now() - Date.parse(c.startedAt ?? c.updatedAt)) / 3600e3) * 100) / 100;
+    c.delivery = { results: { ...(c.verified ?? {}) }, links, at: now(), by: 'integration' };
+    c.state = 'delivered';
+    this.log('deliver', c, actor, { links, auto: true });
     this.save();
     return c;
   }
