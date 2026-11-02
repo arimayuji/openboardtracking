@@ -10,6 +10,11 @@ import { calibrate } from './estimate.js';
 export const ROLES = ['client', 'dev', 'human'];
 export const STATES = ['negotiating', 'agreed', 'building', 'delivered', 'accepted', 'rejected', 'escalated'];
 export const METRICS = ['hours', 'tokens', 'costUsd'];
+// kind: what kind of work it is. feature comes from the client agent;
+// incident and bug usually come from signals (monitoring alerts, bug reports in chat/email).
+export const KINDS = ['feature', 'bug', 'incident'];
+// classOfService: expedite skips the normal WIP limits but has its own, small limit.
+export const CLASSES = ['standard', 'expedite'];
 export const MAX_ROUNDS = 5;
 
 // Organization-wide settings, owned by humans.
@@ -23,7 +28,7 @@ export const MAX_ROUNDS = 5;
 export const DEFAULT_CONFIG = {
   verifiedOnly: [],
   github: { suiteCheck: 'dod-tests', checks: {} },
-  wip: { building: 5, perAgent: 2, escalated: 3 },
+  wip: { building: 5, perAgent: 2, escalated: 3, expedite: 1 },
   dod: [
     { id: 'dod-tests', text: 'automated tests pass' },
     { id: 'dod-security', text: 'no known vulnerabilities introduced' },
@@ -110,19 +115,34 @@ export class Contracts {
 
   // Client agent opens an intent. It owns "what", "why" and "how much it is worth".
   // budget: any subset of { hours, tokens, costUsd }.
-  createIntent({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false }, actor) {
+  createIntent({ classOfService, source, ...args }, actor) {
     if (actor.role !== 'client') throw httpError(403, 'only client can create intents');
+    if (classOfService && classOfService !== 'standard') throw httpError(403, 'only incident signals open expedite work');
+    return this.createContract(args, actor);
+  }
+
+  // Signals from outside (monitoring, chat, email) open work on their own.
+  // Only integrations call this; it is not exposed to agents.
+  openSignal(args, actor) {
+    if (actor.role !== 'integration') throw httpError(403, 'only integrations open signals');
+    return this.createContract(args, actor);
+  }
+
+  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null }, actor) {
+    if (!KINDS.includes(kind)) throw httpError(400, `kind must be one of ${KINDS.join(', ')}`);
+    if (!CLASSES.includes(classOfService)) throw httpError(400, `classOfService must be one of ${CLASSES.join(', ')}`);
     if (!title) throw httpError(400, 'title is required');
     if (!criteria.length) throw httpError(400, 'at least one acceptance criterion is required');
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
+      kind, classOfService, source, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
       state: 'negotiating', rounds: 0,
       dod: structuredClone(this.config.dod), links: [], verified: {},
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },
       usage: emptyUsage(), agreedBy: [], delivery: null, escalation: null, createdAt: now(), updatedAt: now(),
     };
     this.state.contracts.push(c);
-    this.log('intent', c, actor, { title });
+    this.log('intent', c, actor, { title, kind, classOfService, source: source?.type ?? null });
     this.save();
     return c;
   }
@@ -177,7 +197,7 @@ export class Contracts {
   start(id, actor) {
     const c = this.get(id);
     this.guard(c, 'start', actor);
-    this.checkWip(actor.agent);
+    this.checkWip(actor.agent, c);
     c.state = 'building';
     c.assignee = actor.agent;
     c.startedAt = now();
@@ -188,9 +208,16 @@ export class Contracts {
 
   // Pulling new work is blocked while the system is saturated:
   // too much in execution, too much on one agent, or humans with a backlog of escalations.
-  checkWip(agent) {
-    const { building, perAgent, escalated } = this.config.wip;
-    const inBuild = this.list({ state: 'building' });
+  // Expedite work (incidents) only competes with other expedite work.
+  checkWip(agent, c = {}) {
+    const { building, perAgent, escalated, expedite } = this.config.wip;
+    const all = this.list({ state: 'building' });
+    if (c.classOfService === 'expedite') {
+      const n = all.filter((x) => x.classOfService === 'expedite').length;
+      if (expedite != null && n >= expedite) throw httpError(409, `WIP limit: ${n} expedite contracts already building`);
+      return;
+    }
+    const inBuild = all.filter((x) => x.classOfService !== 'expedite');
     if (building != null && inBuild.length >= building) throw httpError(409, `WIP limit: ${building} contracts already building`);
     if (perAgent != null && inBuild.filter((c) => c.assignee === agent).length >= perAgent)
       throw httpError(409, `WIP limit: agent ${agent} already has ${perAgent} contracts building`);
@@ -236,7 +263,7 @@ export class Contracts {
     // A verified result (from CI or another integration) always wins over the dev's claim.
     const passes = (k) => {
       const verified = c.verified?.[k.id];
-      if (this.config.verifiedOnly.includes(k.id)) return verified === true;
+      if (k.verifiedOnly || this.config.verifiedOnly.includes(k.id)) return verified === true;
       return (verified ?? c.delivery?.results?.[k.id]) === true;
     };
     const failing = checks.filter((k) => !passes(k)).map((k) => k.id);
@@ -318,6 +345,16 @@ export class Contracts {
     return c;
   }
 
+  // Same signal seen again (e.g. alert re-triggered): count it, don't open new work.
+  recordOccurrence(id, data, actor) {
+    const c = this.get(id);
+    c.occurrences = (c.occurrences ?? 0) + 1;
+    c.lastSeenAt = now();
+    this.log('occurrence', c, actor, data);
+    this.save();
+    return c;
+  }
+
   // Merge of a linked PR delivers the contract, with verified results as evidence.
   autoDeliver(id, { links = [] }, actor) {
     const c = this.get(id);
@@ -343,6 +380,7 @@ export class Contracts {
     return {
       since: new Date(since).toISOString(),
       counts: Object.fromEntries(STATES.map((s) => [s, this.list({ state: s }).length])),
+      openByKind: Object.fromEntries(KINDS.map((k) => [k, this.state.contracts.filter((c) => (c.kind ?? 'feature') === k && !['accepted', 'rejected'].includes(c.state)).length])),
       needsHuman: this.list({ state: 'escalated' }).map((c) => ({ id: c.id, title: c.title, reason: c.escalation.reason })),
       acceptedRecently: [...new Set(recent.filter((e) => e.type === 'accept' || (e.type === 'resolve' && this.get(e.contractId).state === 'accepted')).map((e) => e.contractId))],
       spendInWindow: spend,

@@ -92,7 +92,7 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 | Melhorar colaborativamente e evoluir experimentalmente | ❌ | Mesmo gap da retrospectiva. |
 | Definição do workflow (início e fim) | ✅ | Ciclo explícito de `negotiating` a `accepted`. |
 | Previsão probabilística (Monte Carlo) | ✅ | Implementado para horas, tokens e custo. |
-| Classes de serviço / urgência | ❌ | Só prioridade 1 a 3. Falta expedite (ex.: incidente em produção) com regras próprias. |
+| Classes de serviço / urgência | ✅ | Classe `expedite` para incidentes, com limite de WIP próprio; só sinais de incidente abrem esse tipo. |
 
 ## 5. Resumo
 
@@ -106,7 +106,7 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 4. **Mudança de escopo durante a execução** (*change request* em `building`), sem precisar rejeitar ou escalar.
 5. **Product Goal e refinamento**: objetivo acima dos contratos, decomposição de intents grandes e dependências.
 6. **Valor explícito por intent**, para ordenar o backlog por valor ÷ custo calibrado, e corte de escopo de baixo valor.
-7. **Classe de serviço expedite**.
+7. ~~Classe de serviço expedite~~ (resolvido junto com a entrada de alertas e bugs)
 8. **Visão de review para o cliente humano** (o que foi entregue no período, quanto custou).
 
 **Riscos de conceito:**
