@@ -118,6 +118,8 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | GET | `/api/calibration` (viés de cada agente por métrica) | todos |
 | GET | `/api/calibrate?hours=10&tokens=200000&agent=dev-a` | todos |
 
+Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-manifestos.md).
+
 ## Roadmap
 
 - Servidor MCP por papel: cada agente só enxerga as ferramentas do seu papel
