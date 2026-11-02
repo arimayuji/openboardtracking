@@ -31,6 +31,13 @@ export const DEFAULT_CONFIG = {
   // slack: channel for notifications, channels whose messages become bug reports,
   // Slack user ids allowed to decide escalations, and UTC hour of the daily digest.
   slack: { channel: null, intakeChannels: [], approvers: [], digestHourUtc: null },
+  // usageSource: "reported" accepts tokens and cost from the dev agent;
+  //   "verified" only accepts them from the provider proxy (dev may still report hours).
+  // pricing: USD per million tokens, per model. Set by humans; no built-in prices,
+  //   because they change. Models without a price are recorded with cost unknown.
+  //   { "<model>": { input, output, cacheRead?, cacheWrite? } }
+  usageSource: 'reported',
+  pricing: {},
   wip: { building: 5, perAgent: 2, escalated: 3, expedite: 1 },
   dod: [
     { id: 'dod-tests', text: 'automated tests pass' },
@@ -74,17 +81,22 @@ export class Contracts {
   get config() { return this.state.config; }
 
   // Only humans change organization rules.
-  updateConfig({ wip, dod, verifiedOnly, github, slack }, actor) {
+  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing }, actor) {
     if (actor.role !== 'human') throw httpError(403, 'only human can change organization config');
     if (wip) this.config.wip = { ...this.config.wip, ...wip };
     if (verifiedOnly) this.config.verifiedOnly = [...verifiedOnly];
     if (github) this.config.github = { ...this.config.github, ...github };
     if (slack) this.config.slack = { ...this.config.slack, ...slack };
+    if (usageSource) {
+      if (!['reported', 'verified'].includes(usageSource)) throw httpError(400, 'usageSource must be reported or verified');
+      this.config.usageSource = usageSource;
+    }
+    if (pricing) this.config.pricing = { ...this.config.pricing, ...pricing };
     if (dod) {
       if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
       this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
     }
-    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack }, at: now() };
+    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing }, at: now() };
     this.state.events.push(ev);
     this.emit(ev);
     this.save();
@@ -236,8 +248,34 @@ export class Contracts {
   reportUsage(id, report, actor) {
     const c = this.get(id);
     this.guard(c, 'usage', actor);
+    this.checkSelfReported(report);
     addUsage(c.usage, report);
     this.log('usage', c, actor, report);
+    return this.checkBurn(c, actor);
+  }
+
+  // With usageSource "verified", tokens and cost only come from the provider proxy.
+  checkSelfReported(report = {}) {
+    if (this.config.usageSource !== 'verified') return;
+    const blocked = ['tokens', 'tokensIn', 'tokensOut', 'costUsd'].filter((k) => report[k] != null);
+    if (blocked.length) throw httpError(409, `${blocked.join(', ')} must come from the provider proxy (usageSource is verified)`);
+  }
+
+  // Usage measured by the provider proxy from the real API response.
+  recordVerifiedUsage(id, usage, actor) {
+    const c = this.get(id);
+    if (c.state !== 'building') throw httpError(409, `contract ${id} is not building`);
+    addUsage(c.usage, usage);
+    c.verifiedUsage ??= { tokens: 0, costUsd: 0, calls: 0, unpricedCalls: 0 };
+    c.verifiedUsage.tokens += Number(usage.tokens) || 0;
+    c.verifiedUsage.costUsd = round(c.verifiedUsage.costUsd + (Number(usage.costUsd) || 0), 4);
+    c.verifiedUsage.calls += 1;
+    if (usage.costUsd == null) c.verifiedUsage.unpricedCalls += 1;
+    this.log('usage', c, actor, { ...usage, verified: true });
+    return this.checkBurn(c, actor);
+  }
+
+  checkBurn(c, actor) {
     const over = overBudget(c.budget, c.usage, (m) => c.usage[m]);
     if (over) return this.escalateInternal(c, `spent ${over.metric} ${round(over.value)} exceeds budget ${over.limit}`, null, actor);
     this.save();
@@ -248,7 +286,7 @@ export class Contracts {
   deliver(id, { results = {}, links = [], usage }, actor) {
     const c = this.get(id);
     this.guard(c, 'deliver', actor);
-    if (usage) { addUsage(c.usage, usage); this.log('usage', c, actor, usage); }
+    if (usage) { this.checkSelfReported(usage); addUsage(c.usage, usage); this.log('usage', c, actor, usage); }
     // No hours reported at all: fall back to wall-clock since start.
     if (!c.usage.hours) c.usage.hours = round((Date.now() - Date.parse(c.startedAt ?? c.updatedAt)) / 3600e3);
     c.delivery = { results, links, at: now() };
