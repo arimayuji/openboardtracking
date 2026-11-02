@@ -4,6 +4,7 @@ import { Contracts, pickMetrics } from './contract.js';
 import { flow } from './flow.js';
 import { Webhooks } from './webhooks.js';
 import { handleGithub, verifySignature } from './github.js';
+import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
 
 const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
@@ -14,6 +15,8 @@ const html = new URL('../public/index.html', import.meta.url);
 // NOTE: header-based identity is for local MVP use only; add real auth before exposing it.
 const routes = [
   ['POST', /^\/api\/integrations\/github$/, () => null], // handled above with the raw body
+  ['POST', /^\/api\/intake\/(\w+)$/, () => null], // handled above with the intake token
+  ['GET', /^\/api\/quickwins$/, (_, q) => quickWins(store, { maxHours: Number(q.get('maxHours') ?? 2) })],
   ['GET', /^\/api\/contracts$/, (_, q) => store.list({ state: q.get('state') ?? undefined })],
   ['POST', /^\/api\/contracts$/, (_, b, a) => store.createIntent(b, a)],
   ['GET', /^\/api\/contracts\/(\w+)$/, ([id]) => store.get(id)],
@@ -56,6 +59,12 @@ const server = createServer(async (req, res) => {
       if (req.method !== method || !m) continue;
       let raw = '';
       for await (const chunk of req) raw += chunk;
+      if (req.method === 'POST' && url.pathname.startsWith('/api/intake/')) {
+        verifyIntakeToken(req.headers['x-obt-intake-token'], process.env.INTAKE_TOKEN);
+        const handler = { '/api/intake/datadog': handleDatadog, '/api/intake/message': handleMessage }[url.pathname];
+        if (!handler) return send(404, { error: 'not found' });
+        return send(200, handler(store, JSON.parse(raw || '{}')));
+      }
       if (url.pathname === '/api/integrations/github') {
         verifySignature(raw, req.headers['x-hub-signature-256'], process.env.GITHUB_WEBHOOK_SECRET);
         return send(200, handleGithub(store, req.headers['x-github-event'], JSON.parse(raw)));
