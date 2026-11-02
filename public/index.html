@@ -4,51 +4,51 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpenBoardTracking</title>
 <style>
-  :root { --bg:#0f1115; --col:#181b22; --card:#232733; --fg:#e6e6e6; --muted:#8a90a0; --acc:#5b8cff; }
+  :root { --bg:#0f1115; --col:#181b22; --card:#232733; --fg:#e6e6e6; --muted:#8a90a0; --acc:#5b8cff; --warn:#ff7a59; }
   * { box-sizing:border-box } body { margin:0; font:14px system-ui; background:var(--bg); color:var(--fg) }
-  header { display:flex; gap:8px; padding:12px 16px; align-items:center; flex-wrap:wrap }
-  h1 { font-size:18px; margin:0 12px 0 0 } input,button { font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #333; background:var(--col); color:var(--fg) }
-  button { background:var(--acc); border:0; cursor:pointer }
-  #board { display:grid; grid-template-columns:repeat(5,minmax(180px,1fr)); gap:10px; padding:0 16px 16px; overflow-x:auto }
+  header { padding:12px 16px } h1 { font-size:18px; margin:0 } header p { color:var(--muted); margin:4px 0 0 }
+  #board { display:grid; grid-template-columns:repeat(7,minmax(170px,1fr)); gap:10px; padding:0 16px 16px; overflow-x:auto }
   .col { background:var(--col); border-radius:8px; padding:8px; min-height:60vh }
+  .col.escalated { outline:1px solid var(--warn) }
   .col h2 { font-size:12px; text-transform:uppercase; color:var(--muted); margin:4px 4px 8px }
-  .card { background:var(--card); border-radius:6px; padding:8px; margin-bottom:8px; cursor:grab }
+  .card { background:var(--card); border-radius:6px; padding:8px; margin-bottom:8px; cursor:pointer }
   .meta { color:var(--muted); font-size:12px; margin-top:4px }
+  .reason { color:var(--warn); font-size:12px; margin-top:4px }
+  button { font:inherit; font-size:12px; padding:3px 8px; margin:6px 4px 0 0; border:0; border-radius:4px; background:var(--acc); color:#fff; cursor:pointer }
   #side { padding:0 16px 16px; color:var(--muted); white-space:pre-wrap; font:12px monospace }
 </style>
 </head>
 <body>
 <header>
   <h1>OpenBoardTracking</h1>
-  <input id="title" placeholder="Nova tarefa..." size="40">
-  <button onclick="add()">Adicionar</button>
-  <button onclick="show('standup')">Daily automática</button>
-  <button onclick="show('metrics')">Métricas</button>
+  <p>Agente do cliente ⇄ agente do dev. Humanos só entram quando há escalonamento.</p>
 </header>
 <div id="board"></div>
 <pre id="side"></pre>
 <script>
-const COLS = ['backlog','ready','doing','review','done'];
-const api = (p, o={}) => fetch('/api'+p, { ...o, headers:{'content-type':'application/json'} }).then(r=>r.json());
+const STATES = ['negotiating','agreed','building','delivered','escalated','accepted','rejected'];
+const api = (p, o={}) => fetch('/api'+p, { ...o, headers:{'content-type':'application/json','x-role':'human','x-agent':'web'} }).then(r=>r.json());
 async function render() {
-  const tasks = await api('/tasks');
-  board.innerHTML = COLS.map(c => `<div class="col" data-col="${c}" ondragover="event.preventDefault()" ondrop="drop(event,'${c}')">
-    <h2>${c} (${tasks.filter(t=>t.column===c).length})</h2>
-    ${tasks.filter(t=>t.column===c).map(t=>`<div class="card" draggable="true" ondragstart="event.dataTransfer.setData('id','${t.id}')">
-      ${esc(t.title)}<div class="meta">P${t.priority} · ${t.assignee ? esc(t.assignee) : 'livre'}</div></div>`).join('')}
-  </div>`).join('');
+  const cs = await api('/contracts');
+  board.innerHTML = STATES.map(s => `<div class="col ${s}"><h2>${s} (${cs.filter(c=>c.state===s).length})</h2>
+    ${cs.filter(c=>c.state===s).map(c=>`<div class="card" onclick="detail('${c.id}')">
+      ${esc(c.title)}
+      <div class="meta">v${c.proposal.version} · ${c.proposal.estimateHours ?? '?'}h · ${c.proposal.criteria.length} critérios</div>
+      ${c.escalation ? `<div class="reason">${esc(c.escalation.reason)}</div>
+        <button onclick="event.stopPropagation();resolve('${c.id}','approve')">Aprovar</button>
+        <button onclick="event.stopPropagation();resolve('${c.id}','renegotiate')">Renegociar</button>
+        <button onclick="event.stopPropagation();resolve('${c.id}','cancel')">Cancelar</button>` : ''}
+    </div>`).join('')}</div>`).join('');
 }
-async function drop(e, col) {
-  const r = await api(`/tasks/${e.dataTransfer.getData('id')}/move`, { method:'POST', body:JSON.stringify({column:col}) });
+async function resolve(id, decision) {
+  const r = await api(`/contracts/${id}/resolve`, { method:'POST', body:JSON.stringify({decision}) });
   if (r.error) alert(r.error); render();
 }
-async function add() {
-  if (!title.value) return;
-  await api('/tasks', { method:'POST', body:JSON.stringify({title:title.value}) });
-  title.value=''; render();
+async function detail(id) {
+  const [c, h] = await Promise.all([api('/contracts/'+id), api(`/contracts/${id}/history`)]);
+  side.textContent = JSON.stringify({ contract:c, history:h.map(e=>`${e.at} ${e.role}/${e.agent} ${e.type} ${JSON.stringify(e.data)}`) }, null, 2);
 }
-async function show(p) { side.textContent = JSON.stringify(await api('/'+p), null, 2); }
-const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 render(); setInterval(render, 5000);
 </script>
 </body>

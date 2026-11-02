@@ -1,20 +1,26 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { Board } from './board.js';
+import { Contracts } from './contract.js';
 
-const board = new Board(process.env.BOARD_FILE ?? 'board.json');
+const store = new Contracts(process.env.BOARD_FILE ?? 'board.json');
 const html = new URL('../public/index.html', import.meta.url);
 
+// Actor identity: x-role (client | dev | human) + x-agent (free-form name).
+// NOTE: header-based identity is for local MVP use only; add real auth before exposing it.
 const routes = [
-  ['GET', /^\/api\/tasks$/, (_, q) => board.list({ column: q.get('column') ?? undefined, assignee: q.get('assignee') ?? undefined })],
-  ['POST', /^\/api\/tasks$/, (_, __, b, actor) => board.create(b, actor)],
-  ['GET', /^\/api\/tasks\/(\w+)$/, ([id]) => board.get(id)],
-  ['POST', /^\/api\/tasks\/(\w+)\/move$/, ([id], _, b, actor) => board.move(id, b.column, actor)],
-  ['POST', /^\/api\/tasks\/(\w+)\/notes$/, ([id], _, b, actor) => board.note(id, b.text, actor)],
-  ['POST', /^\/api\/claim$/, (_, __, ___, actor) => board.claimNext(actor)],
-  ['GET', /^\/api\/standup$/, (_, q) => board.standup(Number(q.get('hours') ?? 24))],
-  ['GET', /^\/api\/metrics$/, () => board.metrics()],
-  ['GET', /^\/api\/events$/, () => board.state.events.slice(-200)],
+  ['GET', /^\/api\/contracts$/, (_, q) => store.list({ state: q.get('state') ?? undefined })],
+  ['POST', /^\/api\/contracts$/, (_, b, a) => store.createIntent(b, a)],
+  ['GET', /^\/api\/contracts\/(\w+)$/, ([id]) => store.get(id)],
+  ['GET', /^\/api\/contracts\/(\w+)\/history$/, ([id]) => store.history(id)],
+  ['POST', /^\/api\/contracts\/(\w+)\/propose$/, ([id], b, a) => store.propose(id, b, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/agree$/, ([id], b, a) => store.agree(id, b, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/start$/, ([id], _, a) => store.start(id, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/deliver$/, ([id], b, a) => store.deliver(id, b, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/accept$/, ([id], _, a) => store.accept(id, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/reject$/, ([id], b, a) => store.reject(id, b, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/escalate$/, ([id], b, a) => store.escalate(id, b, a)],
+  ['POST', /^\/api\/contracts\/(\w+)\/resolve$/, ([id], b, a) => store.resolve(id, b, a)],
+  ['GET', /^\/api\/summary$/, (_, q) => store.summary(Number(q.get?.('hours') ?? 24))],
 ];
 
 const server = createServer(async (req, res) => {
@@ -34,12 +40,13 @@ const server = createServer(async (req, res) => {
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const body = raw ? JSON.parse(raw) : {};
-      const actor = req.headers['x-actor'] ?? 'human';
-      return send(200, fn(m.slice(1), url.searchParams, body, actor));
+      const actor = { role: req.headers['x-role'] ?? 'human', agent: req.headers['x-agent'] ?? 'anonymous' };
+      const arg = method === 'GET' && m.length === 1 ? url.searchParams : body;
+      return send(200, fn(m.slice(1), arg, actor));
     }
     send(404, { error: 'not found' });
   } catch (e) {
-    send(e.status ?? 500, { error: e.message });
+    send(e.status ?? (e instanceof SyntaxError ? 400 : 500), { error: e.message });
   }
 });
 
