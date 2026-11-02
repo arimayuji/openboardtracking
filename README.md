@@ -209,6 +209,33 @@ POST /api/contracts/:id/usage
 O contrato acumula totais e a quebra por modelo (`usage.byModel`). Se nenhuma hora for informada até a entrega,
 usa o tempo de relógio desde o `start`.
 
+### Consumo medido pelo provedor (proxy de uso)
+
+Em vez de confiar no que o agente informa, o agente aponta o SDK para a plataforma e passa o contrato num header:
+
+```bash
+# Anthropic
+ANTHROPIC_BASE_URL=http://localhost:3000/proxy/anthropic   # + header x-obt-contract: <id>
+# OpenAI
+OPENAI_BASE_URL=http://localhost:3000/proxy/openai/v1      # + header x-obt-contract: <id>
+```
+
+- A chamada vai ao provedor sem alteração, com a chave do próprio agente (a plataforma não guarda a chave).
+- A resposta volta igual, inclusive em streaming, e os tokens são lidos dela: Anthropic Messages, OpenAI Chat Completions e Responses.
+  No streaming de Chat Completions, o cliente precisa enviar `stream_options: {"include_usage": true}`.
+- O custo vem da tabela `config.pricing`, em USD por milhão de tokens, definida por humanos. **Não há preços embutidos**, porque eles mudam;
+  modelo sem preço é registrado com custo desconhecido (`verifiedUsage.unpricedCalls`).
+- Com `config.usageSource: "verified"`, tokens e custo só entram pelo proxy; o agente ainda informa horas.
+- Estouro de orçamento medido pelo proxy escala na hora, como o consumo informado.
+- Só aceita contratos em `building`; fora disso recusa sem chamar o provedor.
+
+```bash
+curl -XPOST localhost:3000/api/config -H 'content-type: application/json' -H 'x-role: human' \
+  -d '{"usageSource":"verified","pricing":{"<id do modelo>":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}}}'
+```
+
+Para testes, `ANTHROPIC_UPSTREAM_URL` e `OPENAI_UPSTREAM_URL` trocam o destino.
+
 ## Estimativa baseada em dados
 
 - **Estimativa em três métricas:** o dev propõe `estimate: { hours, tokens, costUsd }` (qualquer subconjunto).
@@ -256,6 +283,7 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | POST | `/api/intake/datadog` · `/api/intake/message` (header `x-obt-intake-token`) | integrações |
 | POST | `/api/integrations/sentry` (assinado pelo Sentry) | Sentry |
 | GET | `/api/quickwins?maxHours=2` | todos |
+| * | `/proxy/anthropic/...` · `/proxy/openai/...` (header `x-obt-contract`) | dev |
 | POST | `/api/integrations/slack/events` · `/api/integrations/slack/interactions` (assinados pelo Slack) | Slack |
 | POST | `/api/slack/digest` | human |
 | GET | `/api/calibrate?hours=10&tokens=200000&agent=dev-a` | todos |
@@ -266,7 +294,6 @@ Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-
 
 - Servidor MCP por papel: cada agente só enxerga as ferramentas do seu papel
 - Critérios de aceite viram testes executados pela plataforma (resultado deixa de ser autodeclarado)
-- Consumo coletado direto da API do provedor de modelo, sem depender do que o agente reporta
 - Calibração por tipo de trabalho (tags), não só por agente
 - Teams, com o mesmo comportamento do Slack
 - Slack: registrar bug a partir de uma reação (ex.: :bug:) em qualquer canal

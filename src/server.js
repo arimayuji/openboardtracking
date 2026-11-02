@@ -5,6 +5,7 @@ import { flow } from './flow.js';
 import { Webhooks } from './webhooks.js';
 import { handleGithub, verifySignature } from './github.js';
 import { Slack, verifySlackSignature } from './slack.js';
+import { proxyRequest } from './usage-proxy.js';
 import { handleSentry, verifySentrySignature } from './sentry.js';
 import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
@@ -64,6 +65,10 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(body));
   };
   try {
+    if (url.pathname.startsWith('/proxy/')) {
+      await proxyRequest(store, req, res);
+      return;
+    }
     for (const [method, re, fn] of routes) {
       const m = url.pathname.match(re);
       if (req.method !== method || !m) continue;
@@ -97,6 +102,7 @@ const server = createServer(async (req, res) => {
     }
     send(404, { error: 'not found' });
   } catch (e) {
+    if (res.headersSent) { console.error('request failed after response started:', e.message); return res.end(); }
     send(e.status ?? (e instanceof SyntaxError ? 400 : 500), { error: e.message });
   }
 });
