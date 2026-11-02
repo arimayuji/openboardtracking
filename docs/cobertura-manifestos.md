@@ -107,7 +107,7 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 5. **Product Goal e refinamento**: objetivo acima dos contratos, decomposição de intents grandes e dependências.
 6. **Valor explícito por intent**, para ordenar o backlog por valor ÷ custo calibrado, e corte de escopo de baixo valor.
 7. ~~Classe de serviço expedite~~ (resolvido junto com a entrada de alertas e bugs)
-8. **Visão de review para o cliente humano** (o que foi entregue no período, quanto custou).
+8. **Visão de review para o cliente humano**: parcialmente coberta pelo resumo diário no Slack; falta uma visão por período no painel.
 
 **Riscos de conceito:**
 - O modelo é literalmente "negociação de contrato", o oposto de um valor do Manifesto. Só funciona se os dois agentes tiverem incentivo comum, não só limites.

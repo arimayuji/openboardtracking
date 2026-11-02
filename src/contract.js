@@ -28,6 +28,9 @@ export const MAX_ROUNDS = 5;
 export const DEFAULT_CONFIG = {
   verifiedOnly: [],
   github: { suiteCheck: 'dod-tests', checks: {} },
+  // slack: channel for notifications, channels whose messages become bug reports,
+  // Slack user ids allowed to decide escalations, and UTC hour of the daily digest.
+  slack: { channel: null, intakeChannels: [], approvers: [], digestHourUtc: null },
   wip: { building: 5, perAgent: 2, escalated: 3, expedite: 1 },
   dod: [
     { id: 'dod-tests', text: 'automated tests pass' },
@@ -71,16 +74,17 @@ export class Contracts {
   get config() { return this.state.config; }
 
   // Only humans change organization rules.
-  updateConfig({ wip, dod, verifiedOnly, github }, actor) {
+  updateConfig({ wip, dod, verifiedOnly, github, slack }, actor) {
     if (actor.role !== 'human') throw httpError(403, 'only human can change organization config');
     if (wip) this.config.wip = { ...this.config.wip, ...wip };
     if (verifiedOnly) this.config.verifiedOnly = [...verifiedOnly];
     if (github) this.config.github = { ...this.config.github, ...github };
+    if (slack) this.config.slack = { ...this.config.slack, ...slack };
     if (dod) {
       if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
       this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
     }
-    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github }, at: now() };
+    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack }, at: now() };
     this.state.events.push(ev);
     this.emit(ev);
     this.save();
