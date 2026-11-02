@@ -114,10 +114,10 @@ function brief(c) {
   return { id: c.id, title: c.title, kind: c.kind ?? 'feature', priority: c.priority, occurrences: c.occurrences ?? 0, state: c.state, source: c.source?.type ?? null };
 }
 
-function findOpen(store, fingerprint) {
+export function findOpen(store, fingerprint) {
   return store.state.contracts.find((c) => c.source?.fingerprint === fingerprint && !CLOSED.includes(c.state));
 }
 
-function lastClosed(store, fingerprint) {
+export function lastClosed(store, fingerprint) {
   return store.state.contracts.filter((c) => c.source?.fingerprint === fingerprint && CLOSED.includes(c.state)).at(-1);
 }
