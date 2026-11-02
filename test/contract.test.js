@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Contracts } from '../src/contract.js';
 
+const DOD = { 'dod-tests': true, 'dod-security': true };
 const client = { role: 'client', agent: 'client-agent' };
 const dev = { role: 'dev', agent: 'dev-agent' };
 const human = { role: 'human', agent: 'alice' };
@@ -16,7 +17,7 @@ test('happy path: negotiate, agree, build, deliver, accept', () => {
   s.agree(c.id, { version: 2 }, client);
   assert.equal(c.state, 'agreed');
   s.start(c.id, dev);
-  s.deliver(c.id, { results: { c1: true, c2: true }, links: ['pr/1'] }, dev);
+  s.deliver(c.id, { results: { c1: true, c2: true, ...DOD }, links: ['pr/1'] }, dev);
   s.accept(c.id, client);
   assert.equal(c.state, 'accepted');
 });
@@ -75,7 +76,7 @@ test('irreversible changes need human approval to accept', () => {
   s.propose(c.id, { estimate: { hours: 1 } }, dev);
   s.agree(c.id, { version: 2 }, dev); s.agree(c.id, { version: 2 }, client);
   s.start(c.id, dev);
-  s.deliver(c.id, { results: { c1: true, c2: true } }, dev);
+  s.deliver(c.id, { results: { c1: true, c2: true, ...DOD } }, dev);
   s.accept(c.id, client);
   assert.equal(c.state, 'escalated');
   s.resolve(c.id, { decision: 'approve' }, human);

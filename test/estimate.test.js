@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Contracts } from '../src/contract.js';
 import { calibrate, calibration, forecast } from '../src/estimate.js';
 
+const DOD = { 'dod-tests': true, 'dod-security': true };
 const client = { role: 'client', agent: 'c' };
 const devA = { role: 'dev', agent: 'dev-a' };
 
@@ -12,7 +13,7 @@ function complete(s, dev, estimate, usage) {
   s.propose(c.id, { estimate }, dev);
   s.agree(c.id, { version: 2 }, dev); s.agree(c.id, { version: 2 }, client);
   s.start(c.id, dev);
-  s.deliver(c.id, { results: { c1: true }, usage }, dev);
+  s.deliver(c.id, { results: { c1: true, ...DOD }, usage }, dev);
   s.accept(c.id, client);
   return c;
 }

@@ -23,6 +23,8 @@ Então não adaptamos Scrum para IA. Traduzimos o que ele tentava resolver para 
 | Sprint | Criar um ritmo de entrega | **Fluxo contínuo de contratos**: entra, negocia, executa, é aceito |
 | Planning poker / story points | Estimar esforço | **Estimativa calibrada pelo histórico** em horas, tokens e custo, sempre em faixa (P50/P85/P95) |
 | Daily | Saber quem está fazendo o quê | **Telemetria**: cada agente reporta consumo e progresso enquanto trabalha |
+| Limite de WIP | Evitar sobrecarga e trabalho parado | **Limites de execução por agente e de escalonamentos pendentes**, mais alerta de contratos parados |
+| Definition of Done | Qualidade mínima comum | **DoD global** definida por humanos, aplicada a todo contrato |
 | Velocity | Medir capacidade | **Custo por entrega aceita** e consumo real contra orçamento |
 | Review / aceite subjetivo | Decidir se está pronto | **Aceite mecânico**: todos os critérios precisam passar |
 | Escalar para o chefe | Desbloquear decisões | **Escalonamento explícito para humano**, só quando a regra manda |
@@ -63,6 +65,33 @@ negotiating → agreed → building → delivered → accepted
   - não há acordo após 5 rodadas;
   - o contrato é `irreversible` (ex.: deploy em produção, migração de dados) e chega ao aceite;
   - ou qualquer agente pede.
+
+## Limites de trabalho em andamento (WIP)
+
+Para agentes, os recursos escassos são execução em paralelo e **atenção humana**. Por isso o `start` é bloqueado quando:
+
+- já existem `wip.building` contratos em execução (padrão 5);
+- o agente já tem `wip.perAgent` contratos em execução (padrão 2);
+- há `wip.escalated` escalonamentos esperando humanos (padrão 3): ninguém puxa trabalho novo enquanto as decisões pendentes se acumulam.
+
+Retrabalho (`reject`) volta para execução sem passar pelo limite, para não ficar travado atrás de trabalho novo.
+
+## Definition of Done global
+
+Além dos critérios do cliente, todo contrato precisa passar na **Definition of Done da organização** (padrão: `dod-tests` e `dod-security`).
+
+- Só `human` altera a DoD (`POST /api/config`). Nem o agente do cliente nem o do dev podem removê-la.
+- A DoD é copiada para o contrato quando ele é criado, então mudar a regra não muda o que já foi combinado.
+- A entrega precisa trazer `results` para os ids da DoD, como faz para os critérios.
+
+## Métricas de fluxo
+
+`GET /api/flow?days=7` devolve, a partir do log de eventos:
+
+- **cycle time** (start → aceite) e **lead time** (intent → aceite) em P50/P85/P95;
+- **throughput** (aceitos por dia na janela);
+- **WIP por estado** e os limites configurados;
+- **idade de cada contrato aberto** no estado atual, com `stale` para os que passaram do P85 do cycle time (ou 24h sem histórico).
 
 ## Consumo: horas, tokens e custo
 
@@ -108,7 +137,7 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | POST | `/api/contracts/:id/agree` `{version}` | client, dev |
 | POST | `/api/contracts/:id/start` | dev |
 | POST | `/api/contracts/:id/usage` `{hours, tokensIn, tokensOut, tokens, costUsd, model, toolCalls}` | dev |
-| POST | `/api/contracts/:id/deliver` `{results: {c1: true}, links[], usage?}` | dev |
+| POST | `/api/contracts/:id/deliver` `{results: {c1: true, "dod-tests": true, ...}, links[], usage?}` | dev |
 | POST | `/api/contracts/:id/accept` · `/reject {reason}` | client |
 | POST | `/api/contracts/:id/escalate` `{reason}` | client, dev |
 | POST | `/api/contracts/:id/resolve` `{decision: approve\|renegotiate\|cancel, budget?}` | human |
@@ -116,7 +145,11 @@ O ator é identificado pelos headers `x-role` (`client` | `dev` | `human`) e `x-
 | GET | `/api/summary` (estados, o que precisa de humano, consumo na janela, custo por entrega aceita) | todos |
 | GET | `/api/forecast?parallel=2` | todos |
 | GET | `/api/calibration` (viés de cada agente por métrica) | todos |
+| GET | `/api/flow?days=7` | todos |
+| GET · POST | `/api/config` `{wip?: {building, perAgent, escalated}, dod?: [texto ou {id, text}]}` | leitura: todos · escrita: human |
 | GET | `/api/calibrate?hours=10&tokens=200000&agent=dev-a` | todos |
+
+Veja também: [cobertura dos conceitos de Agile, Scrum e Kanban](docs/cobertura-manifestos.md).
 
 ## Roadmap
 
