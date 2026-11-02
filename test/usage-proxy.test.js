@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, request } from 'node:http';
 import { Contracts } from '../src/contract.js';
-import { usageFromJson, SseUsage, priceUsage, toContractUsage, proxyRequest } from '../src/usage-proxy.js';
+import { usageFromJson, SseUsage, priceUsage, toContractUsage, proxyFetch } from '../src/usage-proxy.js';
 
 const client = { role: 'client', agent: 'c' };
 const dev = { role: 'dev', agent: 'dev-a' };
 const human = { role: 'human', agent: 'h' };
 const PRICING = { 'model-a': { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } };
+const UPSTREAM = 'http://upstream.test';
 
 function building(s, budget = {}) {
   const c = s.createIntent({ title: 't', criteria: ['ok'], budget }, client);
@@ -62,43 +62,30 @@ test('verified usage source rejects self-reported tokens and cost, still accepts
   assert.throws(() => s.updateConfig({ usageSource: 'whatever' }, human), /usageSource/);
 });
 
-// End-to-end through a fake provider and the real proxy handler.
-async function withServers(store, providerHandler, fn) {
-  const provider = createServer(providerHandler);
-  await new Promise((r) => provider.listen(0, r));
-  process.env.ANTHROPIC_UPSTREAM_URL = `http://localhost:${provider.address().port}`;
-  const proxy = createServer((req, res) => proxyRequest(store, req, res).catch((e) => { res.writeHead(e.status ?? 500); res.end(e.message); }));
-  await new Promise((r) => proxy.listen(0, r));
-  try { await fn(proxy.address().port); } finally { provider.close(); proxy.close(); delete process.env.ANTHROPIC_UPSTREAM_URL; }
+// Fake provider: records what was sent and answers with the given Response.
+function fakeFetch(answer) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init, headers: init.headers });
+    return answer(url, init);
+  };
+  return { fetchImpl, calls };
 }
-function call(port, headers, body) {
-  return new Promise((resolve, reject) => {
-    const r = request({ port, path: '/proxy/anthropic/v1/messages', method: 'POST', headers: { 'content-type': 'application/json', ...headers } }, (res) => {
-      let data = ''; res.on('data', (d) => (data += d)); res.on('end', () => resolve({ status: res.statusCode, data }));
-    });
-    r.on('error', reject); r.end(body);
-  });
-}
+const proxyCall = (store, { fetchImpl, env = { ANTHROPIC_UPSTREAM_URL: UPSTREAM } }, headers, body = '{}', path = '/proxy/anthropic/v1/messages') =>
+  proxyFetch(store, new Request(`http://obt.test${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body }), { fetchImpl, env });
 
 test('proxy forwards the request, returns the response and records verified usage', async () => {
   const s = new Contracts();
   s.updateConfig({ pricing: PRICING }, human);
   const c = building(s, { costUsd: 100 });
-  let seen;
-  await withServers(s, (req, res) => {
-    let b = ''; req.on('data', (d) => (b += d));
-    req.on('end', () => {
-      seen = { key: req.headers['x-api-key'], obt: req.headers['x-obt-contract'], body: JSON.parse(b) };
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ model: 'model-a', content: [], usage: { input_tokens: 1000, output_tokens: 100 } }));
-    });
-  }, async (port) => {
-    const r = await call(port, { 'x-api-key': 'agent-key', 'x-obt-contract': c.id }, JSON.stringify({ model: 'model-a', messages: [] }));
-    assert.equal(r.status, 200);
-    assert.equal(JSON.parse(r.data).usage.input_tokens, 1000);
-  });
-  assert.equal(seen.key, 'agent-key');
-  assert.equal(seen.obt, undefined);
+  const { fetchImpl, calls } = fakeFetch(() => new Response(JSON.stringify({ model: 'model-a', content: [], usage: { input_tokens: 1000, output_tokens: 100 } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  const res = await proxyCall(s, { fetchImpl }, { 'x-api-key': 'agent-key', 'x-obt-contract': c.id }, JSON.stringify({ model: 'model-a', messages: [] }));
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).usage.input_tokens, 1000);
+  assert.equal(calls[0].url, `${UPSTREAM}/v1/messages`);
+  assert.equal(calls[0].init.headers['x-api-key'], 'agent-key');
+  assert.equal(calls[0].init.headers['x-obt-contract'], undefined);
+  assert.equal(JSON.parse(new TextDecoder().decode(calls[0].init.body)).model, 'model-a');
   assert.equal(c.usage.tokens, 1100);
   assert.equal(c.verifiedUsage.calls, 1);
   assert.equal(c.verifiedUsage.costUsd, 0.0045);
@@ -107,25 +94,31 @@ test('proxy forwards the request, returns the response and records verified usag
 test('proxy refuses contracts that are not building, without calling the provider', async () => {
   const s = new Contracts();
   const c = s.createIntent({ title: 't', criteria: ['ok'] }, client);
-  let called = false;
-  await withServers(s, (req, res) => { called = true; res.end(); }, async (port) => {
-    const r = await call(port, { 'x-obt-contract': c.id }, '{}');
-    assert.equal(r.status, 409);
-    assert.equal((await call(port, {}, '{}')).status, 400);
-  });
-  assert.equal(called, false);
+  const { fetchImpl, calls } = fakeFetch(() => new Response('{}'));
+  await assert.rejects(proxyCall(s, { fetchImpl }, { 'x-obt-contract': c.id }), { status: 409 });
+  await assert.rejects(proxyCall(s, { fetchImpl }, {}), { status: 400 });
+  assert.equal(calls.length, 0);
 });
 
 test('verified burn past the budget escalates', async () => {
   const s = new Contracts();
   s.updateConfig({ pricing: PRICING }, human);
   const c = building(s, { tokens: 500 });
-  await withServers(s, (req, res) => {
-    req.resume(); req.on('end', () => {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end('data: {"type":"message_start","message":{"model":"model-a","usage":{"input_tokens":900,"output_tokens":1}}}\n\ndata: {"type":"message_delta","usage":{"output_tokens":50}}\n\n');
-    });
-  }, async (port) => { await call(port, { 'x-obt-contract': c.id }, '{}'); });
+  const sse = 'data: {"type":"message_start","message":{"model":"model-a","usage":{"input_tokens":900,"output_tokens":1}}}\n\ndata: {"type":"message_delta","usage":{"output_tokens":50}}\n\n';
+  const { fetchImpl } = fakeFetch(() => new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+  const res = await proxyCall(s, { fetchImpl }, { 'x-obt-contract': c.id });
+  assert.equal(await res.text(), sse); // the stream passes through unchanged
   assert.equal(c.state, 'escalated');
   assert.match(c.escalation.reason, /spent tokens 950/);
+});
+
+test('upstream error is passed through and records no usage', async () => {
+  const s = new Contracts();
+  s.updateConfig({ pricing: PRICING }, human);
+  const c = building(s);
+  const { fetchImpl } = fakeFetch(() => new Response('{"error":"overloaded"}', { status: 529, headers: { 'content-type': 'application/json' } }));
+  const res = await proxyCall(s, { fetchImpl }, { 'x-obt-contract': c.id });
+  assert.equal(res.status, 529);
+  assert.equal(await res.text(), '{"error":"overloaded"}');
+  assert.equal(c.usage.tokens, 0);
 });

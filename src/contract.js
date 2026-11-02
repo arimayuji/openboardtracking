@@ -3,7 +3,6 @@
 // path (escalation), not the bridge.
 //
 // Capacity is measured in what AI work actually consumes: hours, tokens and money.
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { calibrate } from './estimate.js';
 
@@ -59,10 +58,13 @@ const RULES = {
 };
 
 export class Contracts {
-  constructor(file = null, config = {}) {
-    this.file = file;
-    this.state = { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
-    if (file && existsSync(file)) this.state = JSON.parse(readFileSync(file, 'utf8'));
+  // storage: null (memory only) or { state?: object, persist?: (state) => void }.
+  // Keeps the core runtime-agnostic: Node uses a file (src/file-store.js),
+  // Cloudflare uses Durable Object storage (worker/).
+  constructor(storage = null, config = {}) {
+    if (typeof storage === 'string') throw new Error('pass fileStore(path) from src/file-store.js instead of a path');
+    this.persist = storage?.persist ?? null;
+    this.state = storage?.state ?? { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
     this.state.config = { ...structuredClone(DEFAULT_CONFIG), ...this.state.config };
     this.listeners = [];
   }
@@ -103,7 +105,7 @@ export class Contracts {
     return this.config;
   }
 
-  save() { if (this.file) writeFileSync(this.file, JSON.stringify(this.state, null, 2)); }
+  save() { if (this.persist) this.persist(this.state); }
 
   log(type, c, actor, data = {}) {
     const ev = { id: randomUUID(), type, contractId: c.id, role: actor.role, agent: actor.agent, data, at: now() };
@@ -406,6 +408,32 @@ export class Contracts {
     c.state = 'delivered';
     this.log('deliver', c, actor, { links, auto: true });
     this.save();
+    return c;
+  }
+
+  // Historical work brought in from another tool (see src/importers.js). Only humans import.
+  // Does not open WIP or escalation; the caller saves once after a batch.
+  importContract(fields, actor) {
+    if (actor.role !== 'human') throw httpError(403, 'only human can import history');
+    const at = fields.createdAt ?? now();
+    const c = {
+      id: randomUUID().slice(0, 8), title: fields.title, goal: '', priority: 2, budget: {}, irreversible: false,
+      kind: fields.kind ?? 'feature', classOfService: 'standard', source: fields.source ?? null, occurrences: 0, lastSeenAt: null,
+      state: 'negotiating', rounds: 0,
+      dod: structuredClone(this.config.dod), links: [], verified: {},
+      proposal: {
+        version: 1, by: 'client', criteria: normCriteria(fields.criteria ?? ['imported']),
+        estimate: fields.estimateHours != null ? { hours: fields.estimateHours } : {}, calibrated: null, plan: '',
+      },
+      usage: { ...emptyUsage(), hours: fields.actualHours ?? 0 },
+      agreedBy: [], delivery: null, escalation: null, createdAt: at, updatedAt: at,
+    };
+    Object.assign(c, {
+      state: fields.state ?? 'negotiating', assignee: fields.assignee ?? null, startedAt: fields.startedAt ?? null,
+      acceptedAt: fields.acceptedAt ?? null, delivery: fields.delivery ?? null,
+    });
+    this.state.contracts.push(c);
+    this.log('import', c, actor, { title: c.title, format: c.source?.format ?? null });
     return c;
   }
 

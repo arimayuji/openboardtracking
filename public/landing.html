@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenBoardTracking</title>
+<meta name="description" content="Você descreve o que precisa em português. Agentes de IA constroem. Você decide só o que importa.">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text: #1c2330;
+  --muted: #4f5a6b;
+  --border: #dde2ea;
+  --accent: #1f5fbf;
+  --accent-text: #ffffff;
+  --accent-soft: #e6eefb;
+  --focus: #0b57d0;
+  --footer-bg: #eef1f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d;
+    --surface: #1b212b;
+    --text: #e8ecf2;
+    --muted: #b3bccb;
+    --border: #2f3846;
+    --accent: #7fb0ff;
+    --accent-text: #0d1220;
+    --accent-soft: #223149;
+    --focus: #9cc2ff;
+    --footer-bg: #0e1218;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12161d;
+  --surface: #1b212b;
+  --text: #e8ecf2;
+  --muted: #b3bccb;
+  --border: #2f3846;
+  --accent: #7fb0ff;
+  --accent-text: #0d1220;
+  --accent-soft: #223149;
+  --focus: #9cc2ff;
+  --footer-bg: #0e1218;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px; }
+section { padding: 48px 0; }
+h1, h2, h3 { line-height: 1.25; margin: 0 0 12px; }
+h1 { font-size: clamp(1.9rem, 6vw, 2.9rem); font-weight: 700; }
+h2 { font-size: clamp(1.4rem, 4vw, 1.9rem); font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 650; }
+p { margin: 0 0 12px; }
+.lead { font-size: 1.15rem; color: var(--muted); max-width: 40em; }
+.eyebrow { color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; }
+
+header.top {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 10px 20px;
+  border-radius: 8px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--accent-text);
+  font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.btn:hover { filter: brightness(1.06); }
+.btn.secondary { background: transparent; color: var(--accent); }
+
+a:focus-visible, .btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+a { color: var(--accent); }
+
+.hero { padding: 64px 0 40px; }
+.hero .actions { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+.steps {
+  list-style: none; padding: 0; margin: 24px 0 0;
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  counter-reset: step;
+}
+.steps li {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; position: relative;
+}
+.step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--text); font-weight: 700; margin-bottom: 12px;
+}
+.steps p { color: var(--muted); margin: 0; }
+
+.areas {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: 24px;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; display: flex; flex-direction: column; gap: 10px;
+}
+.card ul { margin: 0; padding-left: 20px; color: var(--muted); }
+.card li + li { margin-top: 6px; }
+.note {
+  margin: auto 0 0; padding: 10px 12px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--text); font-size: 0.95rem;
+}
+.note strong { font-weight: 650; }
+
+.why-list {
+  list-style: none; padding: 0; margin: 24px 0 0;
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.why-list li {
+  border-left: 4px solid var(--accent); padding: 4px 0 4px 16px;
+}
+.why-list p { color: var(--muted); margin: 0; }
+.example {
+  display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--text); font-size: 0.95rem;
+}
+
+.cta-band {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 28px 20px; text-align: center; margin-top: 8px;
+}
+.cta-band p { color: var(--muted); }
+
+footer {
+  background: var(--footer-bg); border-top: 1px solid var(--border);
+  padding: 28px 0; color: var(--muted); font-size: 0.95rem;
+}
+footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+footer p { margin: 0; }
+
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  section { padding: 36px 0; }
+  .hero { padding-top: 40px; }
+  .btn { width: 100%; }
+  .hero .actions .btn { width: 100%; }
+  header.top .btn { width: auto; min-height: 40px; padding: 8px 14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/">OpenBoardTracking</a>
+    <a class="btn secondary" href="/portal">Entrar</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <p class="eyebrow">Para equipes que não programam</p>
+      <h1 id="hero-title">Você descreve o que precisa. Agentes de IA constroem. Você só decide o que importa.</h1>
+      <p class="lead">Peça em português, sem saber programar. Você acompanha o custo, a previsão de prazo e aprova o que realmente depende de você.</p>
+      <div class="actions">
+        <a class="btn" href="/portal">Entrar</a>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="how-title">
+    <div class="wrap">
+      <h2 id="how-title">Como funciona</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-num" aria-hidden="true">1</span>
+          <h3>Você pede</h3>
+          <p>Descreva o resultado que quer, em português, do seu jeito. Se houver um modelo pronto para a sua área, use-o como ponto de partida.</p>
+        </li>
+        <li>
+          <span class="step-num" aria-hidden="true">2</span>
+          <h3>Agentes fazem</h3>
+          <p>Agentes de IA planejam e executam. O custo e o prazo são previstos com base no histórico real de entregas anteriores.</p>
+        </li>
+        <li>
+          <span class="step-num" aria-hidden="true">3</span>
+          <h3>Você decide</h3>
+          <p>Você só é chamado para aprovar o que importa: orçamento, mudanças que não dá para desfazer e a entrega final.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section aria-labelledby="areas-title">
+    <div class="wrap">
+      <h2 id="areas-title">Para a sua área</h2>
+      <p class="lead">Exemplos de pedidos que já têm modelo pronto.</p>
+      <div class="areas">
+
+        <article class="card" aria-labelledby="area-rh">
+          <h3 id="area-rh">Recursos Humanos</h3>
+          <ul>
+            <li>Onboarding automatizado para novas admissões: acessos, e-mail de boas-vindas e checklist de documentos.</li>
+            <li>Relatório mensal de rotatividade por departamento.</li>
+          </ul>
+          <p class="note"><strong>LGPD:</strong> dados de colaboradores são dados pessoais. Esses pedidos são sinalizados e nada é enviado a terceiros sem a sua aprovação.</p>
+        </article>
+
+        <article class="card" aria-labelledby="area-fin">
+          <h3 id="area-fin">Finanças e mercado</h3>
+          <ul>
+            <li>Conciliação diária entre extrato bancário e planilha de lançamentos.</li>
+            <li>Alerta quando uma posição passa do limite de risco combinado.</li>
+          </ul>
+        </article>
+
+        <article class="card" aria-labelledby="area-saude">
+          <h3 id="area-saude">Saúde</h3>
+          <ul>
+            <li>Lembrete automático de consultas por e-mail, com pedido de confirmação.</li>
+            <li>Painel de ocupação da agenda por unidade.</li>
+          </ul>
+          <p class="note"><strong>LGPD:</strong> informações de pacientes são dados sensíveis. Só são usadas com acesso restrito e com a sua autorização.</p>
+        </article>
+
+        <article class="card" aria-labelledby="area-direito">
+          <h3 id="area-direito">Direito</h3>
+          <ul>
+            <li>Controle de prazos processuais, com alerta na véspera de cada vencimento.</li>
+            <li>Triagem de documentos recebidos, separando cláusulas fora do padrão.</li>
+          </ul>
+          <p class="note"><strong>Sigilo:</strong> processos e documentos ficam restritos às pessoas que você autorizar.</p>
+        </article>
+
+        <article class="card" aria-labelledby="area-eco">
+          <h3 id="area-eco">Economia</h3>
+          <ul>
+            <li>Painel de indicadores econômicos, atualizado toda semana.</li>
+            <li>Relatório de inflação por setor, com as fontes citadas.</li>
+          </ul>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="why-title">
+    <div class="wrap">
+      <h2 id="why-title">Por que é diferente</h2>
+      <ul class="why-list">
+        <li>
+          <h3>Custo transparente por entrega</h3>
+          <p>Você vê quanto cada entrega custou, em R$ ou em US$, antes de aprovar.</p>
+        </li>
+        <li>
+          <h3>Previsão com probabilidade</h3>
+          <p>Nada de promessa vaga. Você recebe algo como:</p>
+          <span class="example">85% de chance de ficar pronto até sexta-feira</span>
+        </li>
+        <li>
+          <h3>Verificação automática</h3>
+          <p>Cada entrega é conferida contra a lista de critérios que você definiu antes de chegar até você.</p>
+        </li>
+        <li>
+          <h3>Importação do histórico</h3>
+          <p>Traga projetos passados do Jira, Linear, Trello ou de uma planilha. As previsões já começam calibradas com a sua realidade.</p>
+        </li>
+      </ul>
+      <div class="cta-band" style="margin-top: 32px;">
+        <p>Quer começar? Entre com o seu e-mail corporativo.</p>
+        <a class="btn" href="/portal">Entrar</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>OpenBoardTracking</strong></p>
+    <p>Pedidos com dados pessoais ou sigilosos são sinalizados antes de qualquer ação.</p>
+    <p><a href="/portal">Entrar no portal</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
