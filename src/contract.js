@@ -37,6 +37,10 @@ export const DEFAULT_CONFIG = {
   //   { "<model>": { input, output, cacheRead?, cacheWrite? } }
   // fx: currency conversion for client-facing views, set by humans. { usdToBrl: number }
   fx: { usdToBrl: null },
+  // portal.approvers: e-mails allowed to approve in the client portal. Empty = everyone.
+  // llm: AI-suggested criteria for the web portal. Needs enabled and ANTHROPIC_API_KEY.
+  portal: { approvers: [] },
+  llm: { enabled: false, model: 'claude-haiku-5-5' },
   usageSource: 'reported',
   pricing: {},
   wip: { building: 5, perAgent: 2, escalated: 3, expedite: 1 },
@@ -57,6 +61,7 @@ const RULES = {
   reject:   { roles: ['client'],        from: ['delivered'] },
   escalate: { roles: ['client', 'dev'], from: ['negotiating', 'agreed', 'building', 'delivered'] },
   resolve:  { roles: ['human'],         from: ['escalated'] },
+  change:   { roles: ['client'],        from: ['agreed', 'building', 'delivered'] },
 };
 
 export class Contracts {
@@ -68,6 +73,7 @@ export class Contracts {
     this.persist = storage?.persist ?? null;
     this.state = storage?.state ?? { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
     this.state.config = { ...structuredClone(DEFAULT_CONFIG), ...this.state.config };
+    this.state.goals ??= [];
     this.listeners = [];
   }
 
@@ -84,9 +90,19 @@ export class Contracts {
 
   get config() { return this.state.config; }
 
+  // Empty approver list means everyone may approve (the default).
+  canApprove(email) {
+    const list = (this.config.portal?.approvers ?? []).map((e) => e.toLowerCase());
+    if (!list.length) return true;
+    return list.includes(String(email ?? '').trim().toLowerCase());
+  }
+
   // Only humans change organization rules.
-  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx }, actor) {
+  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx, portal, llm }, actor) {
     if (actor.role !== 'human') throw httpError(403, 'only human can change organization config');
+    if (portal?.approvers !== undefined && (!Array.isArray(portal.approvers) || portal.approvers.some((e) => typeof e !== 'string')))
+      throw httpError(400, 'portal.approvers must be a list of e-mails');
+    if (llm?.enabled !== undefined && typeof llm.enabled !== 'boolean') throw httpError(400, 'llm.enabled must be true or false');
     if (wip) this.config.wip = { ...this.config.wip, ...wip };
     if (verifiedOnly) this.config.verifiedOnly = [...verifiedOnly];
     if (github) this.config.github = { ...this.config.github, ...github };
@@ -97,11 +113,17 @@ export class Contracts {
     }
     if (pricing) this.config.pricing = { ...this.config.pricing, ...pricing };
     if (fx) this.config.fx = { ...this.config.fx, ...fx };
+    if (portal) {
+      const next = { ...portal };
+      if (next.approvers) next.approvers = next.approvers.map((e) => e.trim().toLowerCase()).filter(Boolean);
+      this.config.portal = { ...this.config.portal, ...next };
+    }
+    if (llm) this.config.llm = { ...this.config.llm, ...llm };
     if (dod) {
       if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
       this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
     }
-    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx }, at: now() };
+    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx, portal, llm }, at: now() };
     this.state.events.push(ev);
     this.emit(ev);
     this.save();
@@ -149,14 +171,15 @@ export class Contracts {
     return this.createContract(args, actor);
   }
 
-  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null, area = null, sensitive = null }, actor) {
+  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null, area = null, sensitive = null, goalId = null }, actor) {
     if (!KINDS.includes(kind)) throw httpError(400, `kind must be one of ${KINDS.join(', ')}`);
+    if (goalId != null && !this.state.goals.some((g) => g.id === goalId)) throw httpError(400, 'objetivo não encontrado');
     if (!CLASSES.includes(classOfService)) throw httpError(400, `classOfService must be one of ${CLASSES.join(', ')}`);
     if (!title) throw httpError(400, 'title is required');
     if (!criteria.length) throw httpError(400, 'at least one acceptance criterion is required');
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
-      kind, classOfService, source, area, sensitive, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
+      kind, classOfService, source, area, sensitive, goalId, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
       state: 'negotiating', rounds: 0,
       dod: structuredClone(this.config.dod), links: [], verified: {},
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },
@@ -332,6 +355,25 @@ export class Contracts {
     return c;
   }
 
+  // Client asks to change scope while work is agreed, building or delivered.
+  // Consumption so far stays on the contract; the estimate and plan are kept as reference.
+  requestChange(id, { criteria, reason = '' } = {}, actor) {
+    const c = this.get(id);
+    this.guard(c, 'change', actor);
+    if (!Array.isArray(criteria) || !criteria.length) throw httpError(400, 'criteria must be a non-empty list');
+    const fromState = c.state;
+    const version = c.proposal.version + 1;
+    c.proposal = { ...c.proposal, version, by: 'client', criteria: normCriteria(criteria) };
+    c.agreedBy = [];
+    c.rounds = 0;
+    c.changes ??= [];
+    c.changes.push({ at: now(), reason, fromState, version });
+    c.state = 'negotiating';
+    this.log('change', c, actor, { reason, fromState, version });
+    this.save();
+    return c;
+  }
+
   escalate(id, { reason = '' }, actor) {
     const c = this.get(id);
     this.guard(c, 'escalate', actor);
@@ -438,6 +480,52 @@ export class Contracts {
     this.state.contracts.push(c);
     this.log('import', c, actor, { title: c.title, format: c.source?.format ?? null });
     return c;
+  }
+
+  // ---- Product goals: groups of contracts that serve one outcome ----
+
+  createGoal({ title, description = '', targetDate = null } = {}, actor) {
+    if (!(['client', 'human'].includes(actor.role))) throw httpError(403, 'only client or human can create goals');
+    if (!String(title ?? '').trim()) throw httpError(400, 'title is required');
+    const goal = { id: randomUUID().slice(0, 8), title, description, targetDate, createdAt: now(), createdBy: actor.agent };
+    this.state.goals.push(goal);
+    const ev = { id: randomUUID(), type: 'goal', contractId: null, role: actor.role, agent: actor.agent, data: { goalId: goal.id, title }, at: now() };
+    this.state.events.push(ev);
+    this.emit(ev);
+    this.save();
+    return goal;
+  }
+
+  listGoals() { return this.state.goals; }
+
+  getGoal(id) {
+    const g = this.state.goals.find((g) => g.id === id);
+    if (!g) throw httpError(404, `goal ${id} not found`);
+    return g;
+  }
+
+  linkGoal(id, goalId, actor) {
+    const c = this.get(id);
+    if (actor.role !== 'client') throw httpError(403, 'only client can link a goal');
+    if (!this.state.goals.some((g) => g.id === goalId)) throw httpError(400, 'objetivo não encontrado');
+    c.goalId = goalId;
+    this.log('goal-link', c, actor, { goalId });
+    this.save();
+    return c;
+  }
+
+  // Rejected contracts leave the total; their spend still counts.
+  goalProgress(goalId) {
+    const goal = this.getGoal(goalId);
+    const linked = this.state.contracts.filter((c) => c.goalId === goalId);
+    const cs = linked.filter((c) => c.state !== 'rejected');
+    const accepted = cs.filter((c) => c.state === 'accepted').length;
+    const inProgress = cs.filter((c) => ['negotiating', 'agreed', 'building'].includes(c.state)).length;
+    const waiting = cs.filter((c) => ['delivered', 'escalated'].includes(c.state)).length;
+    const spentUsd = round(linked.reduce((s, c) => s + (c.usage?.costUsd ?? 0), 0));
+    const total = cs.length;
+    const percent = total ? Math.round((accepted / total) * 100) : 0;
+    return { goal, total, accepted, inProgress, waiting, spentUsd, percent };
   }
 
   history(id) { return this.state.events.filter((e) => e.contractId === id); }

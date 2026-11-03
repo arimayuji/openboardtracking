@@ -2,6 +2,7 @@
 // and in Cloudflare Workers. No node:http, node:fs or process.env in here.
 import { pickMetrics, httpError } from './contract.js';
 import { flow } from './flow.js';
+import { retro } from './retro.js';
 import { handleGithub, verifySignature } from './github.js';
 import { verifySlackSignature } from './slack.js';
 import { handleSentry, verifySentrySignature } from './sentry.js';
@@ -47,7 +48,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
 
   // Normal routes: fn(params, body-or-query, actor). GET routes without params get the query string.
   const routes = [
-    ...portalRoutes(store),
+    ...portalRoutes(store, { env, fetchImpl }),
     ['POST', /^\/api\/slack\/digest$/, (_, __, a) => {
       if (a.role !== 'human') throw httpError(403, 'only human can send the digest');
       return slack.sendDigest();
@@ -70,6 +71,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
     ['GET', /^\/api\/calibration$/, () => calibration(store)],
     ['GET', /^\/api\/calibrate$/, (_, q) => calibrate(store, pickMetrics(Object.fromEntries(q)), q.get('agent') ?? undefined)],
     ['GET', /^\/api\/flow$/, (_, q) => flow(store, { days: Number(q.get('days') ?? 7) })],
+    ['GET', /^\/api\/retro$/, (_, q) => retro(store, { days: Number(q.get('days') ?? 14) })],
     ['GET', /^\/api\/config$/, () => store.config],
     ['POST', /^\/api\/config$/, (_, b, a) => store.updateConfig(b, a)],
     ['GET', /^\/api\/webhooks$/, () => hooks.list()],
