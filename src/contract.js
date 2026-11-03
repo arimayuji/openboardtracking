@@ -171,15 +171,18 @@ export class Contracts {
     return this.createContract(args, actor);
   }
 
-  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null, area = null, sensitive = null, goalId = null }, actor) {
+  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null, area = null, sensitive = null, goalId = null, valueScore = null, valueBrl = null }, actor) {
     if (!KINDS.includes(kind)) throw httpError(400, `kind must be one of ${KINDS.join(', ')}`);
     if (goalId != null && !this.state.goals.some((g) => g.id === goalId)) throw httpError(400, 'objetivo não encontrado');
     if (!CLASSES.includes(classOfService)) throw httpError(400, `classOfService must be one of ${CLASSES.join(', ')}`);
     if (!title) throw httpError(400, 'title is required');
     if (!criteria.length) throw httpError(400, 'at least one acceptance criterion is required');
+    if (valueScore != null && !(Number.isInteger(valueScore) && valueScore >= 1 && valueScore <= 5)) throw httpError(400, 'valueScore deve ser de 1 a 5');
+    if (valueBrl != null && !(typeof valueBrl === 'number' && Number.isFinite(valueBrl) && valueBrl >= 0)) throw httpError(400, 'valueBrl deve ser um número maior ou igual a 0');
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
-      kind, classOfService, source, area, sensitive, goalId, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
+      kind, classOfService, source, area, sensitive, goalId, valueScore: valueScore ?? null, valueBrl: valueBrl ?? null,
+      occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
       state: 'negotiating', rounds: 0,
       dod: structuredClone(this.config.dod), links: [], verified: {},
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },
@@ -240,7 +243,10 @@ export class Contracts {
 
   start(id, actor) {
     const c = this.get(id);
+    // Checked before the state guard: a split parent is back in negotiating and should say why it cannot start.
+    if (c.childIds?.length && RULES.start.roles.includes(actor.role)) throw httpError(409, 'Este pedido foi dividido; trabalhe nas partes.');
     this.guard(c, 'start', actor);
+    if (this.blockers(id).length) throw httpError(409, 'Este pedido depende de outros que ainda não foram entregues.');
     this.checkWip(actor.agent, c);
     c.state = 'building';
     c.assignee = actor.agent;
@@ -342,8 +348,94 @@ export class Contracts {
     c.state = 'accepted';
     c.acceptedAt = now();
     this.log('accept', c, actor);
+    this.autoAcceptParent(c);
     this.save();
     return c;
+  }
+
+  // Parent of a split: accepted once every part is accepted (recursively up the tree).
+  autoAcceptParent(child) {
+    if (!child.parentId) return;
+    const parent = this.state.contracts.find((x) => x.id === child.parentId);
+    if (!parent || ['accepted', 'rejected'].includes(parent.state)) return;
+    const parts = this.state.contracts.filter((x) => x.parentId === parent.id);
+    if (!parts.length || !parts.every((x) => x.state === 'accepted')) return;
+    parent.state = 'accepted';
+    parent.acceptedAt = now();
+    this.log('accept', parent, { role: 'system', agent: 'system' }, { auto: true });
+    this.autoAcceptParent(parent);
+  }
+
+  // Splits a large request into parts; each part becomes a child contract.
+  splitContract(id, { parts } = {}, actor) {
+    const c = this.get(id);
+    if (!['client', 'dev'].includes(actor.role)) throw httpError(403, `role ${actor.role} cannot split`);
+    if (!['negotiating', 'agreed'].includes(c.state)) throw httpError(409, `cannot split from state ${c.state}`);
+    if (c.childIds?.length) throw httpError(409, 'este pedido já foi dividido');
+    if (!Array.isArray(parts) || parts.length < 2) throw httpError(400, 'split needs at least 2 parts');
+    for (const p of parts) {
+      if (!p?.title) throw httpError(400, 'each part needs a title');
+      if (!Array.isArray(p.criteria) || !p.criteria.length) throw httpError(400, 'each part needs at least one acceptance criterion');
+    }
+    const children = parts.map((p) => {
+      const child = this.createContract({
+        title: p.title, goal: p.goal ?? '', criteria: p.criteria, priority: c.priority, budget: {},
+        kind: c.kind, classOfService: c.classOfService, source: structuredClone(c.source ?? null),
+        area: c.area, sensitive: c.sensitive, goalId: c.goalId,
+      }, actor);
+      child.parentId = c.id;
+      return child;
+    });
+    c.childIds = children.map((x) => x.id);
+    c.state = 'negotiating';
+    c.agreedBy = [];
+    this.log('split', c, actor, { childIds: c.childIds });
+    this.save();
+    return { parent: c, children };
+  }
+
+  // Dependencies: this contract cannot start until every dependsOn contract is accepted.
+  addDependency(id, dependsOnId, actor) {
+    if (!['client', 'dev'].includes(actor.role)) throw httpError(403, `role ${actor.role} cannot add dependencies`);
+    const c = this.get(id);
+    this.get(dependsOnId);
+    if (id === dependsOnId) throw httpError(400, 'Um pedido não pode depender de si mesmo.');
+    if (this.reaches(dependsOnId, id)) throw httpError(400, 'Isso criaria uma dependência circular.');
+    c.dependsOn ??= [];
+    if (!c.dependsOn.includes(dependsOnId)) c.dependsOn.push(dependsOnId);
+    this.log('depends', c, actor, { dependsOn: dependsOnId });
+    this.save();
+    return c;
+  }
+
+  removeDependency(id, dependsOnId, actor) {
+    if (!['client', 'dev'].includes(actor.role)) throw httpError(403, `role ${actor.role} cannot remove dependencies`);
+    const c = this.get(id);
+    c.dependsOn = (c.dependsOn ?? []).filter((d) => d !== dependsOnId);
+    this.log('undepends', c, actor, { dependsOn: dependsOnId });
+    this.save();
+    return c;
+  }
+
+  // Ids this contract depends on that are not accepted yet.
+  blockers(id) {
+    const c = this.get(id);
+    return (c.dependsOn ?? []).filter((d) => this.state.contracts.find((x) => x.id === d)?.state !== 'accepted');
+  }
+
+  // Does `from` reach `target` by following dependsOn edges?
+  reaches(from, target) {
+    const seen = new Set();
+    const stack = [from];
+    while (stack.length) {
+      const node = stack.pop();
+      if (node === target) return true;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      const n = this.state.contracts.find((x) => x.id === node);
+      for (const d of n?.dependsOn ?? []) stack.push(d);
+    }
+    return false;
   }
 
   reject(id, { reason = '' }, actor) {
@@ -407,6 +499,7 @@ export class Contracts {
     } else throw httpError(400, 'decision must be approve, renegotiate or cancel');
     if (budget) c.budget = { ...c.budget, ...pickMetrics(budget) };
     this.log('resolve', c, actor, { decision, budget });
+    if (c.state === 'accepted') this.autoAcceptParent(c);
     c.escalation = null;
     this.save();
     return c;

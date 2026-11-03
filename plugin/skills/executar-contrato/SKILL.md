@@ -10,6 +10,7 @@ Você conduz um dev por um contrato do OpenBoardTracking, da escolha do trabalho
 ## Passos
 
 1. **Escolha o trabalho.** Se a pessoa não disser qual, use `quick_wins` (com `max_horas` se houver limite) ou `listar_contratos` com `estado` `agreed` ou `negotiating`. Apresente as opções e deixe a pessoa escolher.
+   - Para escolher por valor, use `ranking`, que ordena o trabalho aberto pelo valor por hora de esforço; se a estimativa de um contrato for grande, proponha `dividir_contrato` antes de `propor`.
 2. **Leia o contrato.** Use `ver_contrato` com `id`. Guarde os critérios de aceite, os itens de Definition of Done (DoD) e a versão atual.
 3. **Proponha a estimativa e o plano.** Calcule horas e, se souber, tokens e custo em dólar. Use `propor` com `id`, `horas`, `tokens`, `custo_usd`, `plano` (passos curtos) e `mensagem`, se fizer sentido. Mostre a estimativa à pessoa antes de enviar.
 4. **Concordar.** Após a aceitação da pessoa, chame `concordar` com `id` e `versao` (a versão lida no passo 2). Se o contrato mudou, leia de novo antes.

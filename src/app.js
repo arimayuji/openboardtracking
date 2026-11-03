@@ -8,6 +8,7 @@ import { verifySlackSignature } from './slack.js';
 import { handleSentry, verifySentrySignature } from './sentry.js';
 import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
+import { ranking } from './ranking.js';
 import { proxyFetch } from './usage-proxy.js';
 import { portalRoutes } from './portal.js';
 import { createMcp } from './mcp.js';
@@ -54,6 +55,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
       return slack.sendDigest();
     }],
     ['GET', /^\/api\/quickwins$/, (_, q) => quickWins(store, { maxHours: Number(q.get('maxHours') ?? 2) })],
+    ['GET', /^\/api\/ranking$/, () => ranking(store)],
     ['GET', /^\/api\/contracts$/, (_, q) => store.list({ state: q.get('state') ?? undefined })],
     ['POST', /^\/api\/contracts$/, (_, b, a) => store.createIntent(b, a)],
     ['GET', /^\/api\/contracts\/(\w+)$/, ([id]) => store.get(id)],
@@ -65,6 +67,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
     ['POST', /^\/api\/contracts\/(\w+)\/deliver$/, ([id], b, a) => store.deliver(id, b, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/accept$/, ([id], _, a) => store.accept(id, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/reject$/, ([id], b, a) => store.reject(id, b, a)],
+    ['POST', /^\/api\/contracts\/(\w+)\/split$/, ([id], b, a) => store.splitContract(id, b, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/escalate$/, ([id], b, a) => store.escalate(id, b, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/resolve$/, ([id], b, a) => store.resolve(id, b, a)],
     ['GET', /^\/api\/forecast$/, (_, q) => forecast(store, { parallel: Number(q.get('parallel') ?? 1) })],
@@ -109,7 +112,9 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
         const raw = await request.text();
         const body = raw ? JSON.parse(raw) : {};
         const arg = method === 'GET' && m.length === 1 ? url.searchParams : body;
-        return json(200, await fn(m.slice(1), arg, actor));
+        const out = await fn(m.slice(1), arg, actor);
+        // Handlers may return a ready Response (e.g. a CSV download); anything else is JSON.
+        return out instanceof Response ? out : json(200, out);
       }
 
       return json(404, { error: 'not found' });

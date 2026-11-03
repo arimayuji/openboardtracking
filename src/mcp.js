@@ -31,6 +31,25 @@ const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true };
 
 const dec = ['approve', 'renegotiate', 'cancel'];
 
+// Parts for dividir_pedido / dividir_contrato: at least 2, each with a title and criteria.
+const partesSchema = (description) => ({
+  type: 'array',
+  description,
+  minItems: 2,
+  items: {
+    type: 'object',
+    properties: { titulo: str('Título da parte'), criterios: strArray('Critérios de pronto da parte') },
+    required: ['titulo', 'criterios'],
+  },
+});
+
+// Maps the Portuguese parts to the API shape, with messages a client can read.
+const toParts = (partes) => partes.map((p, i) => {
+  if (!p || typeof p !== 'object' || !p.titulo) throw new ToolError(`A parte ${i + 1} precisa de um título.`);
+  if (!Array.isArray(p.criterios) || !p.criterios.length) throw new ToolError(`A parte ${i + 1} precisa de pelo menos um critério.`);
+  return { title: p.titulo, criteria: p.criterios };
+});
+
 // Each tool: name, description, inputSchema, annotations, and run(args, api, actor) -> { text, data }.
 const CLIENT_TOOLS = [
   {
@@ -59,6 +78,8 @@ const CLIENT_TOOLS = [
       modelo: str('Id de um modelo de listar_modelos (opcional)'),
       orcamento_reais: num('Orçamento máximo em reais (opcional)'),
       objetivo: str('Id de um objetivo de listar_objetivos (opcional)'),
+      valor: { type: 'integer', minimum: 1, maximum: 5, description: 'Quanto isso vale para você, de 1 (pouco) a 5 (muito) (opcional)' },
+      valor_reais: num('Quanto isso vale em reais, estimado (opcional)'),
     }, ['titulo', 'descricao']),
     annotations: WRITE,
     async run(a, api) {
@@ -69,6 +90,8 @@ const CLIENT_TOOLS = [
         templateId: a.modelo,
         budgetBrl: a.orcamento_reais,
         goalId: a.objetivo,
+        valueScore: a.valor,
+        valueBrl: a.valor_reais,
       });
       return {
         text: `Pedido criado: ${view.title} (${view.id}). Status: ${view.status.label}.`,
@@ -218,6 +241,58 @@ const CLIENT_TOOLS = [
       return { text: `Objetivo criado: ${g.goal.title} (${g.goal.id}).`, data: g };
     },
   },
+  {
+    name: 'dividir_pedido',
+    description: 'Divide um pedido grande em partes menores, cada uma com seus critérios de pronto. Use quando o pedido for grande demais para uma entrega só.',
+    inputSchema: obj({
+      id: str('Id do pedido'),
+      partes: partesSchema('Pelo menos 2 partes, cada uma com título e critérios'),
+    }, ['id', 'partes']),
+    annotations: WRITE,
+    async run({ id, partes }, api) {
+      const { children } = await api.post(`/api/portal/requests/${enc(id)}/split`, { parts: toParts(partes) });
+      return {
+        text: [`Pedido dividido em ${children.length} partes:`, ...children.map((c) => `• ${c.title} (${c.id})`)].join('\n'),
+        data: { children },
+      };
+    },
+  },
+  {
+    name: 'adicionar_dependencia',
+    description: 'Indica que um pedido só pode começar depois que outro for entregue e aceito. Não pode criar ciclo entre pedidos.',
+    inputSchema: obj({
+      id: str('Id do pedido que depende de outro'),
+      depende_de: str('Id do pedido que precisa ficar pronto antes'),
+    }, ['id', 'depende_de']),
+    annotations: WRITE,
+    async run({ id, depende_de }, api) {
+      const p = await api.post(`/api/portal/requests/${enc(id)}/depends`, { dependsOn: depende_de });
+      const lines = [`${p.title} agora depende de outro pedido.`];
+      if (p.blockedBy?.length) lines.push(`Ainda bloqueado por: ${p.blockedBy.join(', ')}.`);
+      return { text: lines.join('\n'), data: p };
+    },
+  },
+  {
+    name: 'relatorio',
+    description: 'Relatório de entregas e custo de um período: destaques, totais e comparação com o período anterior. Sem datas, mostra o mês atual.',
+    inputSchema: obj({
+      de: str('Data inicial, por exemplo 2026-10-01 (opcional)'),
+      ate: str('Data final, por exemplo 2026-10-31 (opcional)'),
+    }),
+    annotations: READ,
+    async run({ de, ate }, api) {
+      const q = new URLSearchParams();
+      if (de) q.set('from', de);
+      if (ate) q.set('to', ate);
+      const qs = q.size ? `?${q}` : '';
+      const r = await api.get(`/api/portal/report${qs}`);
+      const cost = r.totals.brl ? `R$ ${r.totals.brl.costBrl.toFixed(2)}` : `US$ ${r.totals.costUsd.toFixed(2)}`;
+      return {
+        text: [...r.highlights, `Entregues: ${r.totals.delivered} · Custo: ${cost}`].join('\n'),
+        data: r,
+      };
+    },
+  },
 ];
 
 const DEV_TOOLS = [
@@ -354,6 +429,39 @@ const DEV_TOOLS = [
       return { text: `Escalonado para decisão humana: ${c.title}. Motivo: ${motivo}.`, data: c };
     },
   },
+  {
+    name: 'dividir_contrato',
+    description: 'Divide um contrato grande em partes, cada uma com seus critérios de aceite. Use quando a estimativa for grande demais para um contrato só.',
+    inputSchema: obj({
+      id: str('Id do contrato'),
+      partes: partesSchema('Pelo menos 2 partes, cada uma com título e critérios'),
+    }, ['id', 'partes']),
+    annotations: WRITE,
+    async run({ id, partes }, api) {
+      const { children } = await api.post(`/api/contracts/${enc(id)}/split`, { parts: toParts(partes) });
+      return {
+        text: [`Contrato dividido em ${children.length} partes:`, ...children.map((c) => `• ${c.title} (${c.id})`)].join('\n'),
+        data: { children },
+      };
+    },
+  },
+  {
+    name: 'ranking',
+    description: 'Ordena o trabalho aberto pelo valor por hora de esforço. Contratos sem estimativa e bloqueados por outros aparecem à parte.',
+    inputSchema: obj({}),
+    annotations: READ,
+    async run(_, api) {
+      const r = await api.get('/api/ranking');
+      return {
+        text: [
+          ...r.ranked.map((i) => `• ${i.title} (${i.id}) — score ${i.score} — ${i.reason}`),
+          `Sem estimativa: ${r.needsEstimate.length}`,
+          `Bloqueados: ${r.blocked.length}`,
+        ].join('\n'),
+        data: r,
+      };
+    },
+  },
 ];
 
 const enc = (v) => encodeURIComponent(String(v));
@@ -378,9 +486,15 @@ function validate(schema, args) {
     if (spec.enum && !spec.enum.includes(v)) return `Valor inválido em ${key}: use ${spec.enum.join(', ')}.`;
     const ok = spec.type === 'array' ? Array.isArray(v)
       : spec.type === 'object' ? typeof v === 'object' && !Array.isArray(v)
-        : typeof v === spec.type;
-    if (!ok) return `Campo ${key} deve ser do tipo ${spec.type === 'array' ? 'lista' : spec.type}.`;
-    if (spec.type === 'array' && v.some((x) => typeof x !== spec.items.type)) return `Campo ${key} deve ser uma lista de textos.`;
+        : spec.type === 'integer' ? Number.isInteger(v)
+          : typeof v === spec.type;
+    if (!ok) return `Campo ${key} deve ser do tipo ${({ array: 'lista', integer: 'número inteiro' })[spec.type] ?? spec.type}.`;
+    if (spec.type === 'array' && v.some((x) => typeof x !== spec.items.type)) {
+      return `Campo ${key} deve ser uma lista de ${spec.items.type === 'object' ? 'objetos' : 'textos'}.`;
+    }
+    if (spec.minimum !== undefined && (v < spec.minimum || v > spec.maximum)) {
+      return `Campo ${key} deve estar entre ${spec.minimum} e ${spec.maximum}.`;
+    }
     if (spec.type === 'array' && spec.minItems && v.length < spec.minItems) return `Campo ${key} precisa de pelo menos ${spec.minItems} item.`;
     if (spec.type === 'object' && Object.values(v).some((x) => typeof x !== spec.additionalProperties.type)) {
       return `Campo ${key} deve ter valores verdadeiro ou falso.`;
