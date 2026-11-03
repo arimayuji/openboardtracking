@@ -8,6 +8,7 @@ import { verifySlackSignature } from './slack.js';
 import { handleSentry, verifySentrySignature } from './sentry.js';
 import { handleDatadog, handleMessage, quickWins, verifyIntakeToken } from './intake.js';
 import { calibration, calibrate, forecast } from './estimate.js';
+import { ranking } from './ranking.js';
 import { proxyFetch } from './usage-proxy.js';
 import { portalRoutes } from './portal.js';
 import { createMcp } from './mcp.js';
@@ -54,6 +55,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
       return slack.sendDigest();
     }],
     ['GET', /^\/api\/quickwins$/, (_, q) => quickWins(store, { maxHours: Number(q.get('maxHours') ?? 2) })],
+    ['GET', /^\/api\/ranking$/, () => ranking(store)],
     ['GET', /^\/api\/contracts$/, (_, q) => store.list({ state: q.get('state') ?? undefined })],
     ['POST', /^\/api\/contracts$/, (_, b, a) => store.createIntent(b, a)],
     ['GET', /^\/api\/contracts\/(\w+)$/, ([id]) => store.get(id)],

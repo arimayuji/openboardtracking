@@ -105,7 +105,8 @@ export function quickWins(store, { maxHours = 2 } = {}) {
     const p85 = c.proposal.calibrated?.hours?.p85 ?? calibrate(store, { hours: est }, c.assignee).hours.p85;
     if (p85 <= maxHours) sized.push({ ...brief(c), estimateHours: est, p85Hours: p85 });
   }
-  sized.sort((a, b) => a.priority - b.priority || b.occurrences - a.occurrences || a.p85Hours - b.p85Hours);
+  const valueOf = new Map(open.map((c) => [c.id, c.valueScore ?? 3]));
+  sized.sort((a, b) => a.priority - b.priority || (valueOf.get(b.id) - valueOf.get(a.id)) || b.occurrences - a.occurrences || a.p85Hours - b.p85Hours);
   needsEstimate.sort((a, b) => a.priority - b.priority || b.occurrences - a.occurrences);
   return { maxHours, quickWins: sized, needsEstimate };
 }
