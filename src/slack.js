@@ -14,6 +14,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { httpError } from './contract.js';
 import { handleMessage, quickWins } from './intake.js';
 import { flow } from './flow.js';
+import { retro } from './retro.js';
 
 const MAX_SKEW_SECONDS = 300;
 const DECISIONS = { approve: 'Aprovar', renegotiate: 'Renegociar', cancel: 'Cancelar' };
@@ -143,8 +144,16 @@ export class Slack {
       f.stale.length ? `*Parados (${f.stale.length}):* ${f.stale.map((id) => `\`${id}\``).join(', ')}` : null,
       q.quickWins.length ? `*Quick wins (${q.quickWins.length}):*\n${q.quickWins.slice(0, 5).map((x) => `• \`${x.id}\` ${escapeMrkdwn(x.title)} (P85 ${x.p85Hours}h)`).join('\n')}` : null,
       q.needsEstimate.length ? `Bugs e incidentes sem estimativa: ${q.needsEstimate.length}` : null,
+      ...this.learningLines(),
     ];
     return lines.filter(Boolean).join('\n');
+  }
+
+  // "O que aprender": up to 3 findings from the last 7 days that need attention.
+  learningLines() {
+    const items = retro(this.store, { days: 7 }).findings.filter((f) => f.severity === 'atenção' || f.severity === 'alta');
+    if (!items.length) return [];
+    return ['*O que aprender:*', ...items.slice(0, 3).map((f) => `• ${escapeMrkdwn(f.text)}`)];
   }
 
   sendDigest() {
