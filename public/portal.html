@@ -286,6 +286,68 @@ table.skipped th { color: var(--muted); font-weight: 600; }
 .chip button.secondary { min-height: 36px; padding: 4px 10px; }
 .suggest-status { color: var(--muted); font-size: 0.9rem; margin: 6px 0 0; min-height: 1.5em; }
 
+[hidden] { display: none !important; }
+fieldset { border: 0; margin: 0 0 16px; padding: 0; min-width: 0; }
+.stack-row select { flex: 1 1 220px; width: auto; }
+legend { font-weight: 600; padding: 0; margin: 0 0 6px; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg label {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0;
+  min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text); font-weight: 600; cursor: pointer;
+}
+.seg label:has(input:checked) { border-color: var(--accent); background: var(--progress-bg); color: var(--progress-fg); }
+.seg input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+input[type="radio"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.tag-value { font-weight: 600; color: var(--progress-fg); background: var(--progress-bg); border-color: transparent; }
+.stack-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.dep-item {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.dep-item:last-child { border-bottom: 0; }
+.dep-item .row-title { margin: 0; }
+.part { margin-bottom: 12px; }
+.part-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.detail-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.detail-section h3 { margin-bottom: 6px; }
+.inline-link { background: none; border: 0; padding: 0; min-height: 0; color: var(--accent); font-weight: 600; text-decoration: underline; }
+.inline-link:hover { filter: none; }
+
+.report-controls { display: grid; gap: 0 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+.report-controls .field { margin-bottom: 12px; }
+.report-controls .btn-row { margin-top: 0; }
+.period-text { color: var(--muted); margin: 0 0 12px; }
+ul.bullets { margin: 0 0 14px; padding-left: 20px; }
+ul.bullets li { margin-bottom: 4px; }
+.delta { color: var(--muted); font-size: 0.88rem; margin: 4px 0 0; }
+.section-gap { margin-top: 18px; }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+table.report-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+table.report-table th, table.report-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.report-table th { color: var(--muted); font-weight: 600; }
+
+@media (max-width: 600px) {
+  table.report-table thead { display: none; }
+  table.report-table, table.report-table tbody, table.report-table tr, table.report-table td { display: block; width: 100%; }
+  table.report-table tr {
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    padding: 10px 12px; margin-bottom: 10px;
+  }
+  table.report-table td { border: 0; padding: 3px 0; display: flex; justify-content: space-between; gap: 12px; }
+  table.report-table td::before { content: attr(data-label); color: var(--muted); font-weight: 600; flex: 0 0 auto; }
+  table.report-table td .cell-value { text-align: right; }
+}
+
+@media print {
+  header.app, nav.tabs, .no-print, button, .btn-row, #global-msg, #request-detail .view-head { display: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .panel, .stat, ul.list > li { border-color: #999 !important; background: #fff !important; color: #000 !important; break-inside: avoid; }
+  .badge, .tag, .tag-value { border: 1px solid #666 !important; background: #fff !important; color: #000 !important; }
+  main.wrap { padding: 0; }
+  a[href]::after { content: none !important; }
+}
+
 @media (max-width: 480px) {
   .wrap { padding: 0 16px; }
   .btn-row button { flex: 1 1 100%; }
@@ -306,6 +368,7 @@ table.skipped th { color: var(--muted); font-weight: 600; }
       <button type="button" data-tab="requests">Pedidos</button>
       <button type="button" data-tab="goals">Objetivos</button>
       <button type="button" data-tab="new">Novo pedido</button>
+      <button type="button" data-tab="report">Relatório</button>
       <button type="button" data-tab="import">Importar histórico</button>
     </nav>
   </div>
@@ -413,6 +476,27 @@ table.skipped th { color: var(--muted); font-weight: 600; }
         <p class="hint">Use para acompanhar este pedido junto com outros que levam ao mesmo resultado.</p>
       </div>
 
+      <fieldset>
+        <legend>Quanto isso vale para você? <span class="muted">(opcional)</span></legend>
+        <div class="seg" id="value-group">
+          <label><input type="radio" name="valueScore" value="1"> <span>Baixo</span></label>
+          <label><input type="radio" name="valueScore" value="2"> <span>Médio-baixo</span></label>
+          <label><input type="radio" name="valueScore" value="3"> <span>Médio</span></label>
+          <label><input type="radio" name="valueScore" value="4"> <span>Alto</span></label>
+          <label><input type="radio" name="valueScore" value="5"> <span>Muito alto</span></label>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button type="button" class="ghost small-btn" data-action="clear-value">Limpar valor</button>
+        </div>
+        <p class="hint">Ajuda o time a decidir por onde começar quando há vários pedidos.</p>
+      </fieldset>
+
+      <div class="field">
+        <label for="new-value-brl">Valor estimado (R$) <span class="muted">(opcional)</span></label>
+        <input type="text" id="new-value-brl" name="valueBrl" inputmode="decimal" placeholder="Ex.: 5000,00" aria-describedby="value-brl-hint">
+        <p class="hint" id="value-brl-hint">Quanto esse resultado vale para o seu negócio, em reais.</p>
+      </div>
+
       <div class="field">
         <label for="new-budget">Orçamento máximo (R$) <span class="muted">(opcional)</span></label>
         <input type="text" id="new-budget" name="budgetBrl" inputmode="decimal" placeholder="Ex.: 2500,00" aria-describedby="budget-hint">
@@ -423,6 +507,41 @@ table.skipped th { color: var(--muted); font-weight: 600; }
         <button type="submit" id="new-submit">Enviar pedido</button>
       </div>
     </form>
+  </section>
+
+  <!-- RELATÓRIO -->
+  <section class="view" id="view-report" aria-labelledby="report-title" hidden>
+    <div class="view-head no-print">
+      <h2 id="report-title">Relatório</h2>
+      <button type="button" class="secondary small-btn" data-action="print-report">Imprimir</button>
+    </div>
+    <p class="muted no-print">Veja o que foi entregue no período, quanto custou e como foi em relação ao período anterior.</p>
+    <div id="report-error"></div>
+    <form id="report-form" class="panel no-print" novalidate>
+      <div class="report-controls">
+        <div class="field">
+          <label for="report-period">Período</label>
+          <select id="report-period" name="period">
+            <option value="month">Este mês</option>
+            <option value="lastMonth">Mês passado</option>
+            <option value="quarter">Este trimestre</option>
+            <option value="custom">Personalizado</option>
+          </select>
+        </div>
+        <div class="field" id="report-from-wrap" hidden>
+          <label for="report-from">De</label>
+          <input type="date" id="report-from" name="from">
+        </div>
+        <div class="field" id="report-to-wrap" hidden>
+          <label for="report-to">Até</label>
+          <input type="date" id="report-to" name="to">
+        </div>
+        <div class="btn-row" id="report-custom-submit" hidden>
+          <button type="submit" id="report-submit">Ver período</button>
+        </div>
+      </div>
+    </form>
+    <div id="report-body" aria-live="polite"><p class="loading">Carregando relatório…</p></div>
   </section>
 
   <!-- IMPORTAR HISTÓRICO -->
@@ -481,6 +600,8 @@ table.skipped th { color: var(--muted); font-weight: 600; }
   };
 
   var FORMAT_LABELS = { jira: 'Jira', linear: 'Linear', trello: 'Trello', generic: 'Planilha genérica' };
+
+  var VALUE_LABELS = { 1: 'Baixo', 2: 'Médio-baixo', 3: 'Médio', 4: 'Alto', 5: 'Muito alto' };
 
   var brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   var usdFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' });
@@ -569,11 +690,14 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     goalFilter: null,
     changeOpen: false,
     changeCriteria: null,
-    changeReason: ''
+    changeReason: '',
+    splitOpen: false,
+    split: null,
+    reportSeq: 0
   };
 
   // ---------- navigation ----------
-  var TABS = ['home', 'requests', 'goals', 'new', 'import'];
+  var TABS = ['home', 'requests', 'goals', 'new', 'report', 'import'];
 
   // goalFilter is only set when arriving from "Ver pedidos"; any other tab switch clears it.
   function showTab(name, goalFilter) {
@@ -589,6 +713,7 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     if (name === 'requests') { state.goalFilter = goalFilter || null; showList(); loadRequests(); }
     if (name === 'goals') loadGoals();
     if (name === 'new') { loadTemplates(); loadGoals(); }
+    if (name === 'report') loadReport();
   }
 
   document.querySelector('nav.tabs').addEventListener('click', function (e) {
@@ -642,6 +767,8 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     state.changeOpen = false;
     state.changeCriteria = null;
     state.changeReason = '';
+    state.splitOpen = false;
+    state.split = null;
   }
 
   function loadRequests() {
@@ -674,10 +801,17 @@ table.skipped th { color: var(--muted); font-weight: 600; }
       if (r.area) meta.push(AREA_LABELS[r.area] || r.area);
       meta.push('Criado em ' + dateBr(r.createdAt));
       meta.push('Gasto: ' + money(r.spent));
+      if (r.parentId) {
+        var parent = state.requests.filter(function (x) { return x.id === r.parentId; })[0];
+        if (parent) meta.push('Parte de: ' + parent.title);
+      }
+      var tags = '';
+      if (r.valueScore) tags += '<span class="tag tag-value">Valor: ' + esc(VALUE_LABELS[r.valueScore] || r.valueScore) + '</span>';
+      if (r.blockedBy && r.blockedBy.length) tags += '<span class="badge tone-attention">Bloqueado</span>';
       return '<li class="' + (r.needsDecision ? 'needs' : '') + '">' +
         '<button type="button" class="row-btn" data-action="open-request" data-id="' + esc(r.id) + '">' +
           (r.needsDecision ? '<p class="needs-flag">' + (r.canDecide === false ? 'Aguardando um aprovador' : 'Precisa da sua decisão') + '</p>' : '') +
-          badge(r.status) +
+          '<span class="stack-row">' + badge(r.status) + tags + '</span>' +
           '<p class="row-title">' + esc(r.title) + '</p>' +
           '<p class="row-meta">' + meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</p>' +
           (r.forecast && r.forecast.text ? '<p class="forecast">' + esc(r.forecast.text) + '</p>' : '') +
@@ -699,10 +833,56 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     renderDetail(id);
   }
 
+  // Looks up titles and status for linked requests (parts, dependencies, parent).
+  // Uses the list already loaded; anything missing is fetched once. Failures become null.
+  function resolveRequests(ids) {
+    var known = {};
+    var missing = [];
+    ids.forEach(function (rid) {
+      if (!rid || known[rid] !== undefined || missing.indexOf(rid) >= 0) return;
+      var local = state.requests.filter(function (x) { return x.id === rid; })[0];
+      if (local) known[rid] = local; else missing.push(rid);
+    });
+    return Promise.all(missing.map(function (rid) {
+      return api('/api/portal/requests/' + encodeURIComponent(rid)).then(function (r) {
+        known[rid] = r;
+      }).catch(function () {
+        known[rid] = null;
+      });
+    })).then(function () { return known; });
+  }
+
+  function splitFormHtml(id) {
+    var parts = state.split.parts;
+    return '<div class="panel" id="split-form"><h3>Dividir em partes</h3>' +
+      '<p class="hint">Cada parte vira um pedido próprio, com os próprios critérios. Este pedido fica como guarda-chuva e só é concluído quando todas as partes forem entregues. São necessárias pelo menos duas partes.</p>' +
+      parts.map(function (p, i) {
+        return '<div class="panel part" role="group" aria-label="Parte ' + (i + 1) + '">' +
+          '<div class="part-head"><strong>Parte ' + (i + 1) + '</strong>' +
+          '<button type="button" class="danger small-btn" data-action="remove-split-part" data-idx="' + i + '"' + (parts.length <= 2 ? ' disabled' : '') + '>Remover parte</button></div>' +
+          '<div class="field"><label for="split-title-' + i + '">Título da parte</label>' +
+          '<input type="text" id="split-title-' + i + '" data-split-title="' + i + '" value="' + esc(p.title) + '" maxlength="160" autocomplete="off"></div>' +
+          '<span class="label" id="split-crit-label-' + i + '">Critérios desta parte</span>' +
+          '<ul class="criteria" aria-labelledby="split-crit-label-' + i + '">' +
+          p.criteria.map(function (c, j) {
+            return '<li><input type="text" aria-label="Critério ' + (j + 1) + ' da parte ' + (i + 1) + '" data-split-crit="' + i + '" data-idx="' + j + '" value="' + esc(c) + '" maxlength="300">' +
+              '<button type="button" class="danger small-btn" data-action="remove-split-criterion" data-part="' + i + '" data-idx="' + j + '" aria-label="Remover critério ' + (j + 1) + ' da parte ' + (i + 1) + '">Remover</button></li>';
+          }).join('') + '</ul>' +
+          '<div class="btn-row" style="margin-top:0"><button type="button" class="secondary small-btn" data-action="add-split-criterion" data-part="' + i + '">Adicionar critério</button></div>' +
+          '</div>';
+      }).join('') +
+      '<div class="btn-row"><button type="button" class="secondary" data-action="add-split-part">Adicionar parte</button>' +
+      '<button type="button" data-action="submit-split" data-id="' + esc(id) + '">Dividir pedido</button>' +
+      '<button type="button" class="ghost" data-action="toggle-split" aria-expanded="true">Cancelar</button></div></div>';
+  }
+
   function renderDetail(id) {
     var d = document.getElementById('request-detail');
     return api('/api/portal/requests/' + encodeURIComponent(id)).then(function (r) {
       if (state.currentRequestId !== id) return; // user navigated away meanwhile
+      var linked = [].concat(r.childIds || [], r.dependsOn || [], r.parentId ? [r.parentId] : []);
+      return resolveRequests(linked).then(function (known) {
+      if (state.currentRequestId !== id) return;
       var criteria = (r.criteria || []).map(function (c) {
         return '<li><span class="mark' + (c.done ? ' done' : '') + '" aria-hidden="true">' + (c.done ? '✓' : '') + '</span>' +
           '<span>' + esc(c.text) + '<span class="muted small"> — ' + (c.done ? 'feito' : 'pendente') + '</span></span></li>';
@@ -782,6 +962,68 @@ table.skipped th { color: var(--muted); font-weight: 600; }
           '<button type="button" class="ghost" data-action="toggle-change" aria-expanded="true">Cancelar</button></div></div>';
       }
 
+      // Parts, dependencies and splitting. Splitting and dependencies are for approvers only.
+      var parentHtml = '';
+      if (r.parentId) {
+        var par = known[r.parentId];
+        parentHtml = par ?
+          '<p class="row-meta">Parte de: <button type="button" class="inline-link" data-action="open-request" data-id="' + esc(par.id) + '">' + esc(par.title) + '</button></p>' :
+          '<p class="row-meta">Parte de outro pedido</p>';
+      }
+
+      var childIds = r.childIds || [];
+      var childrenHtml = childIds.length ?
+        '<div class="panel"><h3>Partes deste pedido</h3><ul class="list">' + childIds.map(function (cid) {
+          var c = known[cid];
+          if (!c) return '<li><p class="row-meta" style="padding:14px 16px;margin:0">Pedido indisponível no momento.</p></li>';
+          return '<li><button type="button" class="row-btn" data-action="open-request" data-id="' + esc(c.id) + '">' +
+            (c.status ? badge(c.status) : '') + '<p class="row-title">' + esc(c.title) + '</p></button></li>';
+        }).join('') + '</ul></div>' : '';
+
+      var dependsOn = r.dependsOn || [];
+      var blockedBy = r.blockedBy || [];
+      var others = state.requests.filter(function (x) { return x.id !== r.id && dependsOn.indexOf(x.id) < 0; });
+      var depsHtml = '';
+      if (dependsOn.length) {
+        depsHtml = '<div class="panel"><h3>Depende de:</h3>' + dependsOn.map(function (oid) {
+          var o = known[oid];
+          var oTitle = o ? o.title : 'Pedido indisponível no momento';
+          return '<div class="dep-item"><span class="stack-row">' + (o && o.status ? badge(o.status) : '') +
+            '<span class="row-title">' + esc(oTitle) + '</span></span>' +
+            (canDecide ? '<button type="button" class="danger small-btn" data-action="remove-dep" data-id="' + esc(r.id) +
+              '" data-other="' + esc(oid) + '" aria-label="Remover dependência: ' + esc(oTitle) + '">Remover</button>' : '') +
+            '</div>';
+        }).join('') +
+        (blockedBy.length ? '<p class="waiting-note">Ainda não pode começar: aguardando ' + esc(blockedBy.join(', ')) + '.</p>' : '') +
+        '</div>';
+      }
+      var dependControl = '';
+      if (canDecide) {
+        dependControl = '<div class="panel"><h3>Depende de…</h3>' +
+          (others.length ?
+            '<label for="dep-select">Pedido que precisa ser entregue antes</label>' +
+            '<div class="stack-row"><select id="dep-select">' +
+              '<option value="">Escolha um pedido</option>' +
+              others.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.title) + '</option>'; }).join('') +
+            '</select><button type="button" class="secondary" data-action="add-dep" data-id="' + esc(r.id) + '">Adicionar dependência</button></div>' :
+            '<p class="hint">Não há outros pedidos para escolher.</p>') +
+          '</div>';
+      }
+
+      var splitHtml = '';
+      var canSplit = canDecide && !childIds.length && r.status && (r.status.code === 'negotiating' || r.status.code === 'agreed');
+      if (canSplit && state.splitOpen && state.split) {
+        splitHtml = splitFormHtml(r.id);
+      } else if (canSplit) {
+        splitHtml = '<div class="panel"><h3>Pedido grande?</h3>' +
+          '<p class="hint">Você pode dividir este pedido em partes menores, cada uma com seus critérios.</p>' +
+          '<div class="btn-row" style="margin-top:0"><button type="button" class="secondary" data-action="toggle-split" aria-expanded="false">Dividir em partes</button></div></div>';
+      }
+
+      var valueHtml = '';
+      if (r.valueScore) valueHtml += '<span>Valor para você: ' + esc(VALUE_LABELS[r.valueScore] || r.valueScore) + '</span>';
+      if (r.valueBrl != null) valueHtml += '<span>Valor estimado: ' + esc(brlFmt.format(r.valueBrl)) + '</span>';
+
       d.innerHTML =
         '<div class="view-head"><button type="button" class="ghost small-btn" data-action="back-list">← Voltar para os pedidos</button>' +
         '<button type="button" class="ghost small-btn" data-action="refresh-detail" data-id="' + esc(r.id) + '">Atualizar</button></div>' +
@@ -790,17 +1032,20 @@ table.skipped th { color: var(--muted); font-weight: 600; }
           badge(r.status) +
           '<h2 style="margin-top:8px">' + esc(r.title) + '</h2>' +
           '<p class="row-meta">' + (r.area ? '<span>' + esc(AREA_LABELS[r.area] || r.area) + '</span>' : '') +
-            '<span>Criado em ' + esc(dateBr(r.createdAt)) + '</span><span>Gasto: ' + esc(money(r.spent)) + '</span></p>' +
+            '<span>Criado em ' + esc(dateBr(r.createdAt)) + '</span><span>Gasto: ' + esc(money(r.spent)) + '</span>' + valueHtml + '</p>' +
+          parentHtml +
           (r.forecast && r.forecast.text ? '<p class="forecast"><strong>Previsão:</strong> ' + esc(r.forecast.text) + '</p>' : '') +
         '</article>' +
         decision + proposal +
         accept + change +
+        childrenHtml + depsHtml + dependControl + splitHtml +
         '<div class="panel"><h3>Critérios de pronto</h3>' +
           (criteria ? '<ul class="checklist">' + criteria + '</ul>' : '<p class="empty">Nenhum critério definido.</p>') +
         '</div>' +
         '<div class="panel"><h3>Linha do tempo</h3>' +
           (timeline ? '<ol class="timeline">' + timeline + '</ol>' : '<p class="empty">Ainda não há movimentações.</p>') +
         '</div>';
+      });
     }).catch(function (err) {
       if (state.currentRequestId !== id) return;
       d.innerHTML = '<div class="view-head"><button type="button" class="ghost small-btn" data-action="back-list">← Voltar para os pedidos</button></div>' +
@@ -1018,6 +1263,172 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     });
   });
 
+  // ---------- relatório ----------
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function isoDay(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  // Start and end dates (local time) for the preset periods.
+  function presetRange(kind) {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = now.getMonth();
+    if (kind === 'lastMonth') return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+    if (kind === 'quarter') {
+      var q = Math.floor(m / 3) * 3;
+      return [new Date(y, q, 1), new Date(y, q + 3, 0)];
+    }
+    return [new Date(y, m, 1), new Date(y, m + 1, 0)];
+  }
+
+  function fmtInt(n) { return Number(n).toLocaleString('pt-BR'); }
+  function fmtDays(n) {
+    var v = Number(n);
+    return v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + (v === 1 ? ' dia' : ' dias');
+  }
+
+  // "+3 vs. período anterior"; null when there is no previous value to compare with.
+  function deltaText(now, before, fmt) {
+    if (typeof now !== 'number' || typeof before !== 'number' || isNaN(now) || isNaN(before)) return '';
+    var d = Math.round((now - before) * 10) / 10;
+    if (d === 0) return 'Igual ao período anterior';
+    return (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + ' vs. período anterior';
+  }
+
+  function statCard(label, value, note) {
+    return '<div class="stat"><p class="label">' + esc(label) + '</p><p class="value">' + esc(value) + '</p>' +
+      (note ? '<p class="delta">' + esc(note) + '</p>' : '') + '</div>';
+  }
+
+  function loadReport() {
+    var body = document.getElementById('report-body');
+    var errBox = document.getElementById('report-error');
+    var period = document.getElementById('report-period').value;
+    var from;
+    var to;
+    errBox.innerHTML = '';
+    if (period === 'custom') {
+      from = document.getElementById('report-from').value;
+      to = document.getElementById('report-to').value;
+      if (!from || !to) {
+        body.innerHTML = '<p class="empty">Escolha as duas datas e clique em “Ver período”.</p>';
+        return Promise.resolve();
+      }
+      if (from > to) {
+        errBox.innerHTML = noticeHtml('error', 'Período inválido.', 'A data inicial precisa ser antes da data final.');
+        return Promise.resolve();
+      }
+    } else {
+      var range = presetRange(period);
+      from = isoDay(range[0]);
+      to = isoDay(range[1]);
+    }
+    var seq = ++state.reportSeq;
+    body.innerHTML = '<p class="loading">Montando o relatório…</p>';
+    return api('/api/portal/report?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)).then(function (rep) {
+      if (seq !== state.reportSeq) return;
+      renderReport(rep || {}, from, to);
+    }).catch(function (err) {
+      if (seq !== state.reportSeq) return;
+      body.innerHTML = noticeHtml('error', 'Não deu para montar o relatório.', err.message);
+    });
+  }
+
+  function renderReport(rep, from, to) {
+    var body = document.getElementById('report-body');
+    var t = rep.totals || {};
+    var p = rep.previous || {};
+    var delivered = Array.isArray(rep.delivered) ? rep.delivered : [];
+    // Same exchange rate as the total, so per-area and per-goal values match the totals.
+    var rate = (typeof t.costBrl === 'number' && t.costUsd > 0) ? t.costBrl / t.costUsd : null;
+    function costOf(usd) {
+      if (typeof usd !== 'number') return '—';
+      return rate != null ? brlFmt.format(usd * rate) : usdFmt.format(usd);
+    }
+
+    var costCard = t.costBrl != null ?
+      statCard('Custo', brlFmt.format(t.costBrl), '') :
+      statCard('Custo', usdFmt.format(Number(t.costUsd) || 0), deltaText(t.costUsd, p.costUsd, function (n) { return usdFmt.format(n); }));
+
+    var highlights = Array.isArray(rep.highlights) ? rep.highlights : [];
+    var highlightsHtml = highlights.length ?
+      '<h3>Destaques</h3><ul class="bullets">' + highlights.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join('') + '</ul>' : '';
+
+    var rows = delivered.map(function (d) {
+      var cost = d.costBrl != null ? brlFmt.format(d.costBrl) : (d.costUsd != null ? usdFmt.format(d.costUsd) : '—');
+      return '<tr>' +
+        '<td data-label="Pedido"><span class="cell-value">' + esc(d.title) + '</span></td>' +
+        '<td data-label="Área"><span class="cell-value">' + esc(AREA_LABELS[d.area] || d.area || '—') + '</span></td>' +
+        '<td data-label="Entregue em"><span class="cell-value">' + esc(dayBr(d.deliveredAt) || '—') + '</span></td>' +
+        '<td data-label="Dias"><span class="cell-value">' + esc(d.days == null ? '—' : fmtDays(d.days)) + '</span></td>' +
+        '<td data-label="Custo"><span class="cell-value">' + esc(cost) + '</span></td>' +
+        '<td data-label="Valor (R$)"><span class="cell-value">' + esc(d.valueBrl == null ? '—' : brlFmt.format(d.valueBrl)) + '</span></td>' +
+      '</tr>';
+    }).join('');
+    var deliveredHtml = delivered.length ?
+      '<h3 class="section-gap">Entregas no período</h3>' +
+      '<div class="report-table-wrap"><table class="report-table"><thead><tr>' +
+        '<th scope="col">Pedido</th><th scope="col">Área</th><th scope="col">Entregue em</th>' +
+        '<th scope="col">Dias</th><th scope="col">Custo</th><th scope="col">Valor (R$)</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' :
+      '<p class="empty">Nenhuma entrega neste período.</p>';
+
+    var areaRows = Object.keys(rep.byArea || {}).map(function (k) {
+      var v = rep.byArea[k] || {};
+      return '<tr><td>' + esc(AREA_LABELS[k] || k) + '</td><td>' + esc(fmtInt(v.delivered || 0)) + '</td><td>' + esc(costOf(v.costUsd)) + '</td></tr>';
+    }).join('');
+    var goalRows = Object.keys(rep.byGoal || {}).map(function (k) {
+      var v = rep.byGoal[k] || {};
+      return '<tr><td>' + esc(v.title || 'Objetivo') + '</td><td>' + esc(fmtInt(v.delivered || 0)) + '</td><td>' + esc(costOf(v.costUsd)) + '</td></tr>';
+    }).join('');
+    function groupTable(caption, head, rowsHtml) {
+      return '<h3 class="section-gap">' + esc(caption) + '</h3>' +
+        '<div style="overflow-x:auto"><table class="skipped"><thead><tr><th scope="col">' + esc(head) +
+        '</th><th scope="col">Entregues</th><th scope="col">Custo</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+    }
+    var areaHtml = areaRows ? groupTable('Por área', 'Área', areaRows) : '';
+    var goalHtml = goalRows ? groupTable('Por objetivo', 'Objetivo', goalRows) : '';
+
+    body.innerHTML =
+      '<p class="period-text">Período: ' + esc(dayBr(from)) + ' a ' + esc(dayBr(to)) + '</p>' +
+      highlightsHtml +
+      '<div class="cards">' +
+        statCard('Entregues', fmtInt(t.delivered || 0), deltaText(t.delivered, p.delivered, fmtInt)) +
+        costCard +
+        (t.valueBrl != null ? statCard('Valor entregue (R$)', brlFmt.format(t.valueBrl), '') : '') +
+        statCard('Tempo médio', t.avgDays == null ? '—' : fmtDays(t.avgDays), deltaText(t.avgDays, p.avgDays, fmtDays)) +
+        statCard('Rejeições', fmtInt(t.rejected || 0), '') +
+        statCard('Mudanças', fmtInt(t.changes || 0), '') +
+        statCard('Incidentes', fmtInt(t.incidents || 0), '') +
+      '</div>' +
+      '<div class="btn-row no-print"><a class="btn" href="/api/portal/report.csv?from=' + encodeURIComponent(from) +
+        '&amp;to=' + encodeURIComponent(to) + '">Baixar planilha</a></div>' +
+      deliveredHtml + areaHtml + goalHtml;
+  }
+
+  document.getElementById('report-period').addEventListener('change', function (e) {
+    var custom = e.target.value === 'custom';
+    document.getElementById('report-from-wrap').hidden = !custom;
+    document.getElementById('report-to-wrap').hidden = !custom;
+    document.getElementById('report-custom-submit').hidden = !custom;
+    if (custom) {
+      var range = presetRange('month');
+      var fromBox = document.getElementById('report-from');
+      var toBox = document.getElementById('report-to');
+      if (!fromBox.value) fromBox.value = isoDay(range[0]);
+      if (!toBox.value) toBox.value = isoDay(range[1]);
+      return;
+    }
+    loadReport();
+  });
+
+  document.getElementById('report-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    loadReport();
+  });
+
   // ---------- event wiring ----------
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-action]');
@@ -1105,6 +1516,95 @@ table.skipped th { color: var(--muted); font-weight: 600; }
 
     if (action === 'refresh-goals') return loadGoals();
 
+    if (action === 'clear-value') {
+      document.querySelectorAll('input[name="valueScore"]').forEach(function (radio) { radio.checked = false; });
+      return;
+    }
+
+    if (action === 'print-report') return window.print();
+
+    if (action === 'toggle-split') {
+      state.splitOpen = !state.splitOpen;
+      state.split = state.splitOpen ? { parts: [{ title: '', criteria: [''] }, { title: '', criteria: [''] }] } : null;
+      return renderDetail(state.currentRequestId).then(function () {
+        if (state.splitOpen) { var first = document.querySelector('[data-split-title="0"]'); if (first) first.focus(); }
+      });
+    }
+
+    if (action === 'add-split-part') {
+      state.split.parts.push({ title: '', criteria: [''] });
+      return renderDetail(state.currentRequestId).then(function () {
+        var titles = document.querySelectorAll('[data-split-title]');
+        if (titles.length) titles[titles.length - 1].focus();
+      });
+    }
+
+    if (action === 'remove-split-part') {
+      if (state.split.parts.length > 2) state.split.parts.splice(Number(el.getAttribute('data-idx')), 1);
+      return renderDetail(state.currentRequestId);
+    }
+
+    if (action === 'add-split-criterion') {
+      var sp = state.split.parts[Number(el.getAttribute('data-part'))];
+      sp.criteria.push('');
+      return renderDetail(state.currentRequestId).then(function () {
+        var inputs = document.querySelectorAll('[data-split-crit="' + el.getAttribute('data-part') + '"]');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+      });
+    }
+
+    if (action === 'remove-split-criterion') {
+      state.split.parts[Number(el.getAttribute('data-part'))].criteria.splice(Number(el.getAttribute('data-idx')), 1);
+      return renderDetail(state.currentRequestId);
+    }
+
+    if (action === 'submit-split') {
+      var parts = (state.split ? state.split.parts : []).map(function (p) {
+        return {
+          title: String(p.title || '').trim(),
+          criteria: (p.criteria || []).map(function (c) { return String(c).trim(); }).filter(Boolean)
+        };
+      });
+      if (parts.length < 2) { detailMsg('error', 'Uma divisão precisa de pelo menos duas partes.'); return; }
+      var emptyIdx = -1;
+      parts.forEach(function (p, i) { if (!p.title && emptyIdx < 0) emptyIdx = i; });
+      if (emptyIdx >= 0) {
+        detailMsg('error', 'Dê um título a cada parte.');
+        var emptyBox = document.querySelector('[data-split-title="' + emptyIdx + '"]');
+        if (emptyBox) emptyBox.focus();
+        return;
+      }
+      el.disabled = true;
+      detailMsg('ok', '');
+      return api('/api/portal/requests/' + encodeURIComponent(id) + '/split', {
+        method: 'POST', body: { parts: parts }
+      }).then(function () {
+        state.splitOpen = false;
+        state.split = null;
+        return refreshAfterAction(id).then(function () {
+          detailMsg('ok', 'Pedido dividido em ' + parts.length + ' partes.');
+        });
+      }).catch(function (err) {
+        el.disabled = false;
+        detailMsg('error', err.message);
+      });
+    }
+
+    if (action === 'add-dep') {
+      var depSel = document.getElementById('dep-select');
+      var otherId = depSel ? depSel.value : '';
+      if (!otherId) { detailMsg('error', 'Escolha um pedido na lista.'); if (depSel) depSel.focus(); return; }
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/depends', {
+        method: 'POST', body: { dependsOn: otherId }
+      }), 'Dependência adicionada.');
+    }
+
+    if (action === 'remove-dep') {
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/depends/' + encodeURIComponent(el.getAttribute('data-other')), {
+        method: 'DELETE'
+      }), 'Dependência removida.');
+    }
+
     if (action === 'goal-requests') {
       var gp = (state.goals || []).filter(function (p) { return p.goal.id === id; })[0];
       return showTab('requests', { id: id, title: gp ? gp.goal.title : 'Objetivo' });
@@ -1175,6 +1675,12 @@ table.skipped th { color: var(--muted); font-weight: 600; }
       state.changeCriteria[Number(e.target.getAttribute('data-idx'))] = e.target.value;
     }
     if (e.target.id === 'change-reason') state.changeReason = e.target.value;
+    if (state.split && e.target.getAttribute) {
+      var pTitle = e.target.getAttribute('data-split-title');
+      var pCrit = e.target.getAttribute('data-split-crit');
+      if (pTitle !== null) state.split.parts[Number(pTitle)].title = e.target.value;
+      if (pCrit !== null) state.split.parts[Number(pCrit)].criteria[Number(e.target.getAttribute('data-idx'))] = e.target.value;
+    }
   });
 
   document.getElementById('new-template').addEventListener('change', function (e) {
@@ -1201,15 +1707,22 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     var templateId = document.getElementById('new-template').value;
     var budget;
 
+    var valueBrl;
+    var valueChecked = document.querySelector('input[name="valueScore"]:checked');
+
     if (!title) { showNewError('Dê um título ao pedido.'); document.getElementById('new-title-input').focus(); return; }
     try { budget = parseBudget(document.getElementById('new-budget').value); }
     catch (err) { showNewError(err.message); document.getElementById('new-budget').focus(); return; }
+    try { valueBrl = parseBudget(document.getElementById('new-value-brl').value); }
+    catch (err) { showNewError(err.message); document.getElementById('new-value-brl').focus(); return; }
 
     var body = { title: title, description: description, criteria: criteria };
     if (templateId) body.templateId = templateId;
     var goalId = document.getElementById('new-goal').value;
     if (goalId) body.goalId = goalId;
     if (budget !== undefined) body.budgetBrl = budget;
+    if (valueChecked) body.valueScore = Number(valueChecked.value);
+    if (valueBrl !== undefined) body.valueBrl = valueBrl;
 
     var submit = document.getElementById('new-submit');
     submit.disabled = true;

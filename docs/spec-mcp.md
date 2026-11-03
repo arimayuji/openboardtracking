@@ -42,6 +42,9 @@ Transporte *Streamable HTTP* com respostas JSON (sem SSE): JSON-RPC 2.0 no corpo
 | `mudar_pedido` | `{ id, criterios: string[] (mín. 1), motivo }` | `POST /api/portal/requests/:id/change` (só aprovador); volta para definição |
 | `listar_objetivos` | `{}` | objetivos com progresso (`GET /api/portal/goals`) |
 | `criar_objetivo` | `{ titulo, descricao?, data_alvo? }` | `POST /api/portal/goals` |
+| `dividir_pedido` | `{ id, partes: [{ titulo, criterios: string[] }] (mín. 2) }` | `POST /api/portal/requests/:id/split` (só aprovador) |
+| `adicionar_dependencia` | `{ id, depende_de }` | `POST /api/portal/requests/:id/depends` (só aprovador); recusa ciclo |
+| `relatorio` | `{ de?, ate? }` | `GET /api/portal/report?from&to` (sem datas: mês atual) |
 
 ### Ferramentas do dev (chamam `/api/*` com `{ role: 'dev', agent }`)
 
@@ -56,6 +59,8 @@ Transporte *Streamable HTTP* com respostas JSON (sem SSE): JSON-RPC 2.0 no corpo
 | `registrar_horas` | `{ id, horas }` | `usage` (só horas) |
 | `entregar` | `{ id, resultados: { [criterio]: boolean }, links?: string[] }` | `deliver` |
 | `escalar` | `{ id, motivo }` | `escalate` |
+| `dividir_contrato` | `{ id, partes: [{ titulo, criterios: string[] }] (mín. 2) }` | `POST /api/contracts/:id/split` |
+| `ranking` | `{}` | `GET /api/ranking`: trabalho aberto por valor por hora, com sem estimativa e bloqueados |
 
 Cada ferramenta tem `inputSchema` (JSON Schema) e `annotations` (`readOnlyHint` nas de leitura, `destructiveHint` em `decidir` com cancelamento e `pedir_ajustes`).
 `text` do resultado: resumo legível em português; `structuredContent`: o JSON da API. Erro da API (status ≥ 400) → `isError: true` com a mensagem.

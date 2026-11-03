@@ -67,6 +67,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
     ['POST', /^\/api\/contracts\/(\w+)\/deliver$/, ([id], b, a) => store.deliver(id, b, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/accept$/, ([id], _, a) => store.accept(id, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/reject$/, ([id], b, a) => store.reject(id, b, a)],
+    ['POST', /^\/api\/contracts\/(\w+)\/split$/, ([id], b, a) => store.splitContract(id, b, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/escalate$/, ([id], b, a) => store.escalate(id, b, a)],
     ['POST', /^\/api\/contracts\/(\w+)\/resolve$/, ([id], b, a) => store.resolve(id, b, a)],
     ['GET', /^\/api\/forecast$/, (_, q) => forecast(store, { parallel: Number(q.get('parallel') ?? 1) })],
@@ -111,7 +112,9 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
         const raw = await request.text();
         const body = raw ? JSON.parse(raw) : {};
         const arg = method === 'GET' && m.length === 1 ? url.searchParams : body;
-        return json(200, await fn(m.slice(1), arg, actor));
+        const out = await fn(m.slice(1), arg, actor);
+        // Handlers may return a ready Response (e.g. a CSV download); anything else is JSON.
+        return out instanceof Response ? out : json(200, out);
       }
 
       return json(404, { error: 'not found' });

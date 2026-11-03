@@ -78,7 +78,7 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 | Sprint Backlog / Sprint Goal | ➖ | Sem sprint. O papel de foco é feito pelo plano de cada contrato. |
 | Increment | 🟡 | Cada contrato aceito é um incremento. Falta garantir que ele é **integrável e utilizável** junto com os outros (release, integração). |
 | Definition of Done | ✅ | DoD global (`/api/config`), copiada para cada contrato na criação, exigida no aceite. |
-| Refinamento do backlog | ❌ | Não há decomposição de intents grandes nem fatiamento. |
+| Refinamento do backlog | ✅ | Pedidos grandes divididos em partes, com dependências e ranking por valor. |
 
 ## 4. Kanban
 
@@ -104,10 +104,10 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 2. ~~Definition of Done global~~ (resolvido no PR #2; ainda autodeclarada)
 3. ~~Retrospectiva automática~~ (resolvido: `/api/retro` e "O que aprender" no resumo do Slack)
 4. ~~Mudança de escopo durante a execução~~ (resolvido: "Mudar o pedido" volta para definição sem perder o consumo)
-5. **Product Goal e refinamento**: objetivos de produto resolvidos; faltam decomposição de pedidos grandes e dependências.
-6. **Valor explícito por intent**, para ordenar o backlog por valor ÷ custo calibrado, e corte de escopo de baixo valor.
+5. ~~Product Goal e refinamento~~ (resolvido: objetivos, divisão de pedidos e dependências)
+6. ~~Valor explícito por intent~~ (resolvido: valor 1 a 5 e em R$, ranking por valor ÷ P85 calibrado)
 7. ~~Classe de serviço expedite~~ (resolvido junto com a entrada de alertas e bugs)
-8. **Visão de review para o cliente humano**: parcialmente coberta pelo resumo diário no Slack; falta uma visão por período no painel.
+8. ~~Visão de review para o cliente humano~~ (resolvido: aba Relatório por período, com comparação e planilha)
 
 **Riscos de conceito:**
 - O modelo é literalmente "negociação de contrato", o oposto de um valor do Manifesto. Só funciona se os dois agentes tiverem incentivo comum, não só limites.

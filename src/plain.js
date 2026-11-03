@@ -55,6 +55,12 @@ export function clientView(store, contract, actor) {
     title: c.title,
     area: c.area ?? null,
     goalId: c.goalId ?? null,
+    parentId: c.parentId ?? null,
+    childIds: c.childIds ?? [],
+    dependsOn: c.dependsOn ?? [],
+    blockedBy: blockedByTitles(store, c),
+    valueScore: c.valueScore ?? null,
+    valueBrl: c.valueBrl ?? null,
     canDecide: actor ? store.canApprove(actor.agent) : true,
     canChange: ['agreed', 'building', 'delivered'].includes(c.state),
     createdAt: c.createdAt,
@@ -69,6 +75,15 @@ export function clientView(store, contract, actor) {
       done: c.verified?.[k.id] === true || c.delivery?.results?.[k.id] === true,
     })),
   };
+}
+
+// Titles of the unfinished dependencies, so the client sees what is holding the request.
+function blockedByTitles(store, c) {
+  if (typeof store.blockers !== 'function') return [];
+  const ids = store.blockers(c.id) ?? [];
+  if (!ids.length) return [];
+  const all = store.list();
+  return ids.map((id) => all.find((x) => x.id === id)?.title).filter((t) => t != null);
 }
 
 // The dev side proposed estimate and plan; the client must confirm it before work starts.
