@@ -29,6 +29,8 @@ const TIMELINE_TEXT = {
   resolve: 'Decisão registrada',
   occurrence: 'O problema aconteceu de novo',
   verified: 'Verificação automática concluída',
+  change: 'Você pediu uma mudança no pedido',
+  'goal-link': 'Pedido ligado a um objetivo',
 };
 
 const HOURS_PER_DAY = 8;
@@ -44,13 +46,17 @@ function toBrl(store, usd) {
   return rate == null ? null : round(usd * rate, 2);
 }
 
-export function clientView(store, contract) {
+// actor (optional): canDecide tells the portal whether this person may approve; no actor = true.
+export function clientView(store, contract, actor) {
   const c = contract;
   const forecast = forecastText(store, c);
   return {
     id: c.id,
     title: c.title,
     area: c.area ?? null,
+    goalId: c.goalId ?? null,
+    canDecide: actor ? store.canApprove(actor.agent) : true,
+    canChange: ['agreed', 'building', 'delivered'].includes(c.state),
     createdAt: c.createdAt,
     status: { code: c.state, ...(STATUS[c.state] ?? { label: c.state, tone: 'neutral' }) },
     spent: { usd: c.usage?.costUsd ?? 0, brl: toBrl(store, c.usage?.costUsd ?? 0) },

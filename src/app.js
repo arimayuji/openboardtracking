@@ -48,7 +48,7 @@ export function createApp({ store, hooks, slack, env = {}, fetchImpl = globalThi
 
   // Normal routes: fn(params, body-or-query, actor). GET routes without params get the query string.
   const routes = [
-    ...portalRoutes(store),
+    ...portalRoutes(store, { env, fetchImpl }),
     ['POST', /^\/api\/slack\/digest$/, (_, __, a) => {
       if (a.role !== 'human') throw httpError(403, 'only human can send the digest');
       return slack.sendDigest();

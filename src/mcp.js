@@ -58,6 +58,7 @@ const CLIENT_TOOLS = [
       criterios: strArray('Critérios verificáveis de pronto, em linguagem simples'),
       modelo: str('Id de um modelo de listar_modelos (opcional)'),
       orcamento_reais: num('Orçamento máximo em reais (opcional)'),
+      objetivo: str('Id de um objetivo de listar_objetivos (opcional)'),
     }, ['titulo', 'descricao']),
     annotations: WRITE,
     async run(a, api) {
@@ -67,6 +68,7 @@ const CLIENT_TOOLS = [
         criteria: a.criterios,
         templateId: a.modelo,
         budgetBrl: a.orcamento_reais,
+        goalId: a.objetivo,
       });
       return {
         text: `Pedido criado: ${view.title} (${view.id}). Status: ${view.status.label}.`,
@@ -153,6 +155,23 @@ const CLIENT_TOOLS = [
     },
   },
   {
+    name: 'mudar_pedido',
+    description: 'Muda o escopo de um pedido já acordado, em andamento ou entregue. criterios são os novos critérios de pronto; motivo explica a mudança. O pedido volta para definição e o time faz uma nova proposta.',
+    inputSchema: obj({
+      id: str('Id do pedido'),
+      criterios: { ...strArray('Os critérios de pronto novos, em linguagem simples'), minItems: 1 },
+      motivo: str('Por que o escopo está mudando'),
+    }, ['id', 'criterios', 'motivo']),
+    annotations: DESTRUCTIVE,
+    async run({ id, criterios, motivo }, api) {
+      const p = await api.post(`/api/portal/requests/${enc(id)}/change`, { criteria: criterios, reason: motivo });
+      return {
+        text: `Mudança registrada: ${p.title}. O pedido voltou para definição e o time fará uma nova proposta.`,
+        data: p,
+      };
+    },
+  },
+  {
     name: 'visao_geral',
     description: 'Resumo do mês: entregas, o que está em andamento, o que espera a sua decisão e o gasto.',
     inputSchema: obj({}),
@@ -164,6 +183,39 @@ const CLIENT_TOOLS = [
         text: `Entregues no mês: ${o.deliveredThisMonth}. Em andamento: ${o.inProgress}. Esperando você: ${o.waitingYou}. Gasto no mês: ${spent}.`,
         data: o,
       };
+    },
+  },
+  {
+    name: 'listar_objetivos',
+    description: 'Lista os objetivos (grupos de pedidos que servem a um mesmo resultado) com o progresso de cada um.',
+    inputSchema: obj({}),
+    annotations: READ,
+    async run(_, api) {
+      const items = await api.get('/api/portal/goals');
+      return {
+        text: items.length
+          ? items.map((g) => `• ${g.goal.title} (${g.goal.id}) — ${g.accepted} de ${g.total} entregues (${g.percent}%)`).join('\n')
+          : 'Nenhum objetivo ainda.',
+        data: { items },
+      };
+    },
+  },
+  {
+    name: 'criar_objetivo',
+    description: 'Cria um objetivo para agrupar pedidos que servem a um mesmo resultado. Depois, use o id em criar_pedido (campo objetivo).',
+    inputSchema: obj({
+      titulo: str('Título curto do objetivo'),
+      descricao: str('O resultado que se quer alcançar (opcional)'),
+      data_alvo: str('Data alvo, por exemplo 2027-03-31 (opcional)'),
+    }, ['titulo']),
+    annotations: WRITE,
+    async run(a, api) {
+      const g = await api.post('/api/portal/goals', {
+        title: a.titulo,
+        description: a.descricao,
+        targetDate: a.data_alvo,
+      });
+      return { text: `Objetivo criado: ${g.goal.title} (${g.goal.id}).`, data: g };
     },
   },
 ];
@@ -329,6 +381,7 @@ function validate(schema, args) {
         : typeof v === spec.type;
     if (!ok) return `Campo ${key} deve ser do tipo ${spec.type === 'array' ? 'lista' : spec.type}.`;
     if (spec.type === 'array' && v.some((x) => typeof x !== spec.items.type)) return `Campo ${key} deve ser uma lista de textos.`;
+    if (spec.type === 'array' && spec.minItems && v.length < spec.minItems) return `Campo ${key} precisa de pelo menos ${spec.minItems} item.`;
     if (spec.type === 'object' && Object.values(v).some((x) => typeof x !== spec.additionalProperties.type)) {
       return `Campo ${key} deve ter valores verdadeiro ou falso.`;
     }

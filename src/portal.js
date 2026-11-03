@@ -6,6 +6,7 @@ import { httpError } from './contract.js';
 import { TEMPLATES, getTemplate, intentFromTemplate } from './templates.js';
 import { clientView, timeline, overview } from './plain.js';
 import { importHistory } from './importers.js';
+import { suggestCriteria } from './criteria-llm.js';
 
 const NO_CRITERIA = 'Descreva pelo menos um critério de pronto, por exemplo: "- O relatório mostra o turnover por área"';
 const NO_FX = 'O câmbio ainda não foi configurado; peça ao administrador para definir a cotação do dólar.';
@@ -54,12 +55,19 @@ function rank(c) {
   return 2;
 }
 
-export function portalRoutes(store) {
+export function portalRoutes(store, { env = {}, fetchImpl = globalThis.fetch } = {}) {
   const human = (actor) => {
     if (actor?.role !== 'human') throw httpError(403, 'only human can use the client portal');
   };
   const client = (actor) => ({ role: 'client', agent: actor.agent });
   const decider = (actor) => ({ role: 'human', agent: actor.agent });
+
+  // Only approvers (config.portal.approvers; empty list = everyone) confirm, decide, accept, reject and change scope.
+  const requireApprover = (actor) => {
+    if (store.canApprove(actor.agent)) return;
+    const first = store.config.portal?.approvers?.[0] ?? 'um aprovador';
+    throw httpError(403, `Só aprovadores podem fazer isso. Peça para ${first} aprovar.`);
+  };
 
   // Wraps a handler: role check first, then store errors become plain messages.
   const route = (fn) => (params, body, actor, url) => {
@@ -78,14 +86,40 @@ export function portalRoutes(store) {
 
     ['GET', /^\/api\/portal\/overview$/, route(() => overview(store))],
 
-    ['GET', /^\/api\/portal\/requests$/, route(() => store.list()
-      .slice()
-      .sort((a, b) => rank(a) - rank(b) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-      .map((c) => clientView(store, c)))],
+    ['GET', /^\/api\/portal\/requests$/, route((_, query, actor) => {
+      const goalId = query.get?.('goalId') || null;
+      return store.list()
+        .filter((c) => !goalId || c.goalId === goalId)
+        .slice()
+        .sort((a, b) => rank(a) - rank(b) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .map((c) => clientView(store, c, actor));
+    })],
 
-    ['GET', /^\/api\/portal\/requests\/(\w+)$/, route(([id]) => {
+    ['GET', /^\/api\/portal\/requests\/(\w+)$/, route(([id], _, actor) => {
       const c = store.get(id);
-      return { ...clientView(store, c), timeline: timeline(store, c) };
+      return { ...clientView(store, c, actor), timeline: timeline(store, c) };
+    })],
+
+    // Criteria suggested by the LLM for the New request form; the person reviews them before sending.
+    ['POST', /^\/api\/portal\/suggest-criteria$/, route(async (_, body) => {
+      if (!store.config.llm?.enabled) throw httpError(503, 'Sugestão automática não está ativada.');
+      const template = body.templateId ? getTemplate(body.templateId) : null;
+      if (body.templateId && !template) throw httpError(400, 'Este modelo de pedido não existe mais. Escolha outro ou comece do zero.');
+      const criteria = await suggestCriteria(
+        { title: body.title, description: body.description, area: template?.area ?? null },
+        { apiKey: env.ANTHROPIC_API_KEY, model: store.config.llm.model, fetchImpl },
+      );
+      return { criteria };
+    })],
+
+    ['GET', /^\/api\/portal\/goals$/, route(() => store.listGoals().map((g) => store.goalProgress(g.id)))],
+
+    ['POST', /^\/api\/portal\/goals$/, route((_, body, actor) => {
+      const goal = store.createGoal(
+        { title: body.title, description: body.description ?? '', targetDate: body.targetDate ?? null },
+        client(actor),
+      );
+      return store.goalProgress(goal.id);
     })],
 
     ['POST', /^\/api\/portal\/requests$/, route((_, body, actor) => {
@@ -93,32 +127,46 @@ export function portalRoutes(store) {
       if (body.templateId && !template) throw httpError(400, 'Este modelo de pedido não existe mais. Escolha outro ou comece do zero.');
       const criteria = resolveCriteria(body, template);
       const budget = budgetFor(store, body.budgetBrl);
+      const goalId = body.goalId || null;
       const intent = template
-        ? { ...intentFromTemplate(template, { title: body.title, description: body.description, budget }), criteria }
-        : { title: body.title, goal: body.description, criteria, budget };
-      return clientView(store, store.createIntent(intent, client(actor)));
+        ? { ...intentFromTemplate(template, { title: body.title, description: body.description, budget }), criteria, goalId }
+        : { title: body.title, goal: body.description, criteria, budget, goalId };
+      return clientView(store, store.createIntent(intent, client(actor)), actor);
     })],
 
     // Client confirms the team's current proposal (estimate and plan) so work can start.
     ['POST', /^\/api\/portal\/requests\/(\w+)\/confirm$/, route(([id], body, actor) => {
+      requireApprover(actor);
       const c = store.get(id);
       store.agree(id, { version: body.version ?? c.proposal.version }, client(actor));
-      return clientView(store, store.get(id));
+      return clientView(store, store.get(id), actor);
     })],
 
     ['POST', /^\/api\/portal\/requests\/(\w+)\/decision$/, route(([id], body, actor) => {
+      requireApprover(actor);
       store.resolve(id, { decision: body.decision }, decider(actor));
-      return clientView(store, store.get(id));
+      return clientView(store, store.get(id), actor);
     })],
 
     ['POST', /^\/api\/portal\/requests\/(\w+)\/accept$/, route(([id], _, actor) => {
+      requireApprover(actor);
       store.accept(id, client(actor));
-      return clientView(store, store.get(id));
+      return clientView(store, store.get(id), actor);
     })],
 
     ['POST', /^\/api\/portal\/requests\/(\w+)\/reject$/, route(([id], body, actor) => {
+      requireApprover(actor);
       store.reject(id, { reason: body.reason ?? '' }, client(actor));
-      return clientView(store, store.get(id));
+      return clientView(store, store.get(id), actor);
+    })],
+
+    // Client changes scope while agreed, building or delivered: the request goes back to negotiation.
+    ['POST', /^\/api\/portal\/requests\/(\w+)\/change$/, route(([id], body, actor) => {
+      requireApprover(actor);
+      const criteria = Array.isArray(body.criteria) ? body.criteria.map((s) => String(s).trim()).filter(Boolean) : [];
+      if (!criteria.length) throw httpError(400, 'Escreva pelo menos um critério para a mudança.');
+      store.requestChange(id, { criteria, reason: body.reason ?? '' }, client(actor));
+      return clientView(store, store.get(id), actor);
     })],
 
     ['POST', /^\/api\/portal\/import$/, route((_, body, actor) => importHistory(

@@ -203,7 +203,7 @@ button.small-btn { min-height: 36px; padding: 6px 10px; font-weight: 600; }
 
 label, .label { display: block; font-weight: 600; margin: 0 0 6px; }
 .hint { color: var(--muted); font-size: 0.9rem; margin: 4px 0 0; }
-input[type="text"], input[type="number"], input[type="file"], select, textarea {
+input[type="text"], input[type="number"], input[type="date"], input[type="file"], select, textarea {
   width: 100%; min-height: 44px; padding: 9px 12px;
   border: 1px solid var(--border); border-radius: 8px;
   background: var(--surface); color: var(--text);
@@ -265,6 +265,27 @@ table.skipped th { color: var(--muted); font-weight: 600; }
 .stats-inline { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 14px; }
 .stats-inline .stat { flex: 1 1 130px; }
 
+.waiting-note {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--notice-info-bg); color: var(--text);
+}
+.progress {
+  height: 12px; border-radius: 999px; overflow: hidden; margin: 10px 0 4px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.progress > span { display: block; height: 100%; background: var(--progress-fg); }
+.goal-body { padding: 14px 16px; }
+.goal-body h3 { margin-bottom: 4px; }
+.goal-body .progress-text { font-weight: 600; margin: 4px 0 0; }
+.chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.chip {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 4px 6px 4px 12px; border-radius: 999px;
+  background: var(--progress-bg); color: var(--progress-fg); font-weight: 600;
+}
+.chip button.secondary { min-height: 36px; padding: 4px 10px; }
+.suggest-status { color: var(--muted); font-size: 0.9rem; margin: 6px 0 0; min-height: 1.5em; }
+
 @media (max-width: 480px) {
   .wrap { padding: 0 16px; }
   .btn-row button { flex: 1 1 100%; }
@@ -283,6 +304,7 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     <nav class="tabs" aria-label="Seções do portal">
       <button type="button" data-tab="home" aria-current="page">Início</button>
       <button type="button" data-tab="requests">Pedidos</button>
+      <button type="button" data-tab="goals">Objetivos</button>
       <button type="button" data-tab="new">Novo pedido</button>
       <button type="button" data-tab="import">Importar histórico</button>
     </nav>
@@ -308,9 +330,43 @@ table.skipped th { color: var(--muted); font-weight: 600; }
         <h2 id="requests-title">Pedidos</h2>
         <button type="button" class="ghost small-btn" data-action="refresh-requests">Atualizar</button>
       </div>
+      <div id="goal-filter"></div>
       <div id="requests-list"><p class="loading">Carregando pedidos…</p></div>
     </div>
     <div id="request-detail" hidden></div>
+  </section>
+
+  <!-- OBJETIVOS -->
+  <section class="view" id="view-goals" aria-labelledby="goals-title" hidden>
+    <div class="view-head">
+      <h2 id="goals-title">Objetivos</h2>
+      <button type="button" class="ghost small-btn" data-action="refresh-goals">Atualizar</button>
+    </div>
+    <p class="muted">Um objetivo junta os pedidos que levam ao mesmo resultado. Aqui você vê o avanço de cada um.</p>
+    <div id="goals-list"><p class="loading">Carregando objetivos…</p></div>
+
+    <h3 style="margin-top:20px">Novo objetivo</h3>
+    <div id="goal-error"></div>
+    <form id="goal-form" class="panel" novalidate>
+      <div class="field">
+        <label for="goal-title">Título</label>
+        <input type="text" id="goal-title" name="title" maxlength="160" autocomplete="off" required>
+      </div>
+
+      <div class="field">
+        <label for="goal-description">Descrição</label>
+        <textarea id="goal-description" name="description" rows="3" placeholder="O resultado que você quer alcançar, em português simples."></textarea>
+      </div>
+
+      <div class="field">
+        <label for="goal-target">Data alvo <span class="muted">(opcional)</span></label>
+        <input type="date" id="goal-target" name="targetDate">
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" id="goal-submit">Criar objetivo</button>
+      </div>
+    </form>
   </section>
 
   <!-- NOVO PEDIDO -->
@@ -343,7 +399,18 @@ table.skipped th { color: var(--muted); font-weight: 600; }
         <ul class="criteria" id="criteria-list" aria-labelledby="criteria-label"></ul>
         <div class="btn-row">
           <button type="button" class="secondary small-btn" data-action="add-criterion">Adicionar critério</button>
+          <button type="button" class="secondary small-btn" data-action="suggest-criteria" id="suggest-btn">Sugerir critérios</button>
         </div>
+        <p class="suggest-status" id="suggest-status" role="status"></p>
+        <div id="suggest-error"></div>
+      </div>
+
+      <div class="field">
+        <label for="new-goal">Objetivo <span class="muted">(opcional)</span></label>
+        <select id="new-goal" name="goalId">
+          <option value="">Nenhum objetivo</option>
+        </select>
+        <p class="hint">Use para acompanhar este pedido junto com outros que levam ao mesmo resultado.</p>
       </div>
 
       <div class="field">
@@ -497,13 +564,19 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     currentRequestId: null,
     criteria: [],
     selectedTemplate: null,
-    rejectOpen: false
+    rejectOpen: false,
+    goals: [],
+    goalFilter: null,
+    changeOpen: false,
+    changeCriteria: null,
+    changeReason: ''
   };
 
   // ---------- navigation ----------
-  var TABS = ['home', 'requests', 'new', 'import'];
+  var TABS = ['home', 'requests', 'goals', 'new', 'import'];
 
-  function showTab(name) {
+  // goalFilter is only set when arriving from "Ver pedidos"; any other tab switch clears it.
+  function showTab(name, goalFilter) {
     TABS.forEach(function (t) {
       document.getElementById('view-' + t).hidden = (t !== name);
     });
@@ -513,8 +586,9 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     });
     setGlobal(null, '');
     if (name === 'home') loadOverview();
-    if (name === 'requests') { showList(); loadRequests(); }
-    if (name === 'new') loadTemplates();
+    if (name === 'requests') { state.goalFilter = goalFilter || null; showList(); loadRequests(); }
+    if (name === 'goals') loadGoals();
+    if (name === 'new') { loadTemplates(); loadGoals(); }
   }
 
   document.querySelector('nav.tabs').addEventListener('click', function (e) {
@@ -565,12 +639,17 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     d.hidden = true;
     d.innerHTML = '';
     state.currentRequestId = null;
+    state.changeOpen = false;
+    state.changeCriteria = null;
+    state.changeReason = '';
   }
 
   function loadRequests() {
     var list = document.getElementById('requests-list');
     list.innerHTML = '<p class="loading">Carregando pedidos…</p>';
-    return api('/api/portal/requests').then(function (items) {
+    renderGoalFilter();
+    var url = '/api/portal/requests' + (state.goalFilter ? '?goalId=' + encodeURIComponent(state.goalFilter.id) : '');
+    return api(url).then(function (items) {
       state.requests = Array.isArray(items) ? items : [];
       renderRequests();
     }).catch(function (err) {
@@ -581,7 +660,9 @@ table.skipped th { color: var(--muted); font-weight: 600; }
   function renderRequests() {
     var list = document.getElementById('requests-list');
     if (!state.requests.length) {
-      list.innerHTML = '<p class="empty">Você ainda não tem pedidos. Use “Novo pedido” para começar.</p>';
+      list.innerHTML = state.goalFilter ?
+        '<p class="empty">Nenhum pedido neste objetivo ainda. Ao criar um pedido, escolha este objetivo na lista.</p>' :
+        '<p class="empty">Você ainda não tem pedidos. Use “Novo pedido” para começar.</p>';
       return;
     }
     // Items that need a decision come first; otherwise keep the server order.
@@ -595,7 +676,7 @@ table.skipped th { color: var(--muted); font-weight: 600; }
       meta.push('Gasto: ' + money(r.spent));
       return '<li class="' + (r.needsDecision ? 'needs' : '') + '">' +
         '<button type="button" class="row-btn" data-action="open-request" data-id="' + esc(r.id) + '">' +
-          (r.needsDecision ? '<p class="needs-flag">Precisa da sua decisão</p>' : '') +
+          (r.needsDecision ? '<p class="needs-flag">' + (r.canDecide === false ? 'Aguardando um aprovador' : 'Precisa da sua decisão') + '</p>' : '') +
           badge(r.status) +
           '<p class="row-title">' + esc(r.title) + '</p>' +
           '<p class="row-meta">' + meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</p>' +
@@ -608,6 +689,9 @@ table.skipped th { color: var(--muted); font-weight: 600; }
   function openRequest(id) {
     state.currentRequestId = id;
     state.rejectOpen = false;
+    state.changeOpen = false;
+    state.changeCriteria = null;
+    state.changeReason = '';
     document.getElementById('requests-list-wrap').hidden = true;
     var d = document.getElementById('request-detail');
     d.hidden = false;
@@ -627,40 +711,75 @@ table.skipped th { color: var(--muted); font-weight: 600; }
         return '<li><p class="at">' + esc(dateTimeBr(t.at)) + '</p><p>' + esc(t.text) + '</p></li>';
       }).join('');
 
+      // Only approvers get decision buttons; everyone else sees a calm note instead.
+      var canDecide = r.canDecide !== false;
       var decision = '';
       if (r.needsDecision) {
         decision = '<div class="decision-box" role="region" aria-label="Decisão necessária">' +
-          '<p><strong>Precisamos da sua decisão</strong></p>' +
+          '<p><strong>' + (canDecide ? 'Precisamos da sua decisão' : 'Precisamos de uma decisão') + '</strong></p>' +
           '<p>' + esc(r.needsDecision.question) + '</p>' +
-          '<div class="btn-row">' + (r.needsDecision.options || []).map(function (o) {
-            var cls = o.decision === 'cancel' ? 'danger' : (o.decision === 'approve' ? '' : 'secondary');
-            return '<button type="button" class="' + cls + '" data-action="decide" data-id="' + esc(r.id) +
-              '" data-decision="' + esc(o.decision) + '">' + esc(o.label) + '</button>';
-          }).join('') + '</div></div>';
+          (canDecide ?
+            '<div class="btn-row">' + (r.needsDecision.options || []).map(function (o) {
+              var cls = o.decision === 'cancel' ? 'danger' : (o.decision === 'approve' ? '' : 'secondary');
+              return '<button type="button" class="' + cls + '" data-action="decide" data-id="' + esc(r.id) +
+                '" data-decision="' + esc(o.decision) + '">' + esc(o.label) + '</button>';
+            }).join('') + '</div>' :
+            '<p class="waiting-note">Aguardando um aprovador.</p>') +
+          '</div>';
       }
 
       var proposal = '';
       if (r.proposal) {
         proposal = '<div class="decision-box" role="region" aria-label="Proposta do time">' +
           '<p><strong>Proposta do time</strong></p><p>' + esc(r.proposal.text) + '</p>' +
-          '<div class="btn-row"><button type="button" data-action="confirm" data-id="' + esc(r.id) +
-          '" data-version="' + esc(r.proposal.version) + '">Confirmar e começar</button></div></div>';
+          (canDecide ?
+            '<div class="btn-row"><button type="button" data-action="confirm" data-id="' + esc(r.id) +
+            '" data-version="' + esc(r.proposal.version) + '">Confirmar e começar</button></div>' :
+            '<p class="waiting-note">Aguardando um aprovador.</p>') + '</div>';
       }
 
       var accept = '';
       if (r.canAccept) {
-        accept = '<div class="panel"><h3>A entrega está pronta para você</h3>' +
+        accept = '<div class="panel"><h3>' + (canDecide ? 'A entrega está pronta para você' : 'A entrega está pronta para revisão') + '</h3>' +
           '<p class="muted small">Confira os critérios acima. Se estiver como combinado, aprove. Se não, peça ajustes.</p>' +
-          '<div class="btn-row">' +
-            '<button type="button" data-action="accept" data-id="' + esc(r.id) + '">Aprovar entrega</button>' +
-            '<button type="button" class="secondary" data-action="toggle-reject" aria-expanded="' + (state.rejectOpen ? 'true' : 'false') + '">Pedir ajustes</button>' +
-          '</div>' +
-          (state.rejectOpen ?
-            '<div class="reveal"><label for="reject-reason">O que precisa ser ajustado?</label>' +
-            '<textarea id="reject-reason" rows="3" placeholder="Descreva o que falta ou o que mudar."></textarea>' +
-            '<div class="btn-row"><button type="button" data-action="reject" data-id="' + esc(r.id) + '">Enviar pedido de ajustes</button>' +
-            '<button type="button" class="ghost" data-action="toggle-reject">Cancelar</button></div></div>' : '') +
+          (canDecide ?
+            '<div class="btn-row">' +
+              '<button type="button" data-action="accept" data-id="' + esc(r.id) + '">Aprovar entrega</button>' +
+              '<button type="button" class="secondary" data-action="toggle-reject" aria-expanded="' + (state.rejectOpen ? 'true' : 'false') + '">Pedir ajustes</button>' +
+            '</div>' +
+            (state.rejectOpen ?
+              '<div class="reveal"><label for="reject-reason">O que precisa ser ajustado?</label>' +
+              '<textarea id="reject-reason" rows="3" placeholder="Descreva o que falta ou o que mudar."></textarea>' +
+              '<div class="btn-row"><button type="button" data-action="reject" data-id="' + esc(r.id) + '">Enviar pedido de ajustes</button>' +
+              '<button type="button" class="ghost" data-action="toggle-reject">Cancelar</button></div></div>' : '') :
+            '<p class="waiting-note">Aguardando um aprovador.</p>') +
           '</div>';
+      }
+
+      // Scope change: approvers only, and only when the request's state allows it.
+      var changeOn = !!(r.canChange && canDecide);
+      if (!changeOn) state.changeOpen = false;
+      var change = '';
+      if (changeOn && !state.changeOpen) {
+        change = '<div class="panel"><div class="btn-row" style="margin-top:0">' +
+          '<button type="button" class="secondary" data-action="toggle-change" aria-expanded="false">Mudar o pedido</button></div></div>';
+      }
+      if (changeOn && state.changeOpen) {
+        if (!state.changeCriteria) state.changeCriteria = (r.criteria || []).map(function (c) { return String(c.text || ''); });
+        if (!state.changeCriteria.length) state.changeCriteria = [''];
+        change = '<div class="panel"><h3>Mudar o pedido</h3>' +
+          '<p class="hint">O trabalho volta para definição e o time faz uma nova proposta. O que já foi feito continua registrado.</p>' +
+          '<span class="label" id="change-criteria-label">Critérios do pedido</span>' +
+          '<ul class="criteria" id="change-criteria" aria-labelledby="change-criteria-label">' +
+          state.changeCriteria.map(function (c, i) {
+            return '<li><input type="text" aria-label="Critério ' + (i + 1) + '" data-idx="' + i + '" value="' + esc(c) + '" maxlength="300">' +
+              '<button type="button" class="danger small-btn" data-action="remove-change-criterion" data-idx="' + i + '" aria-label="Remover critério ' + (i + 1) + '">Remover</button></li>';
+          }).join('') + '</ul>' +
+          '<div class="btn-row"><button type="button" class="secondary small-btn" data-action="add-change-criterion">Adicionar critério</button></div>' +
+          '<div class="field" style="margin-top:12px"><label for="change-reason">Por que mudar?</label>' +
+          '<textarea id="change-reason" rows="3" placeholder="Explique o motivo da mudança.">' + esc(state.changeReason) + '</textarea></div>' +
+          '<div class="btn-row"><button type="button" data-action="submit-change" data-id="' + esc(r.id) + '">Enviar mudança</button>' +
+          '<button type="button" class="ghost" data-action="toggle-change" aria-expanded="true">Cancelar</button></div></div>';
       }
 
       d.innerHTML =
@@ -675,7 +794,7 @@ table.skipped th { color: var(--muted); font-weight: 600; }
           (r.forecast && r.forecast.text ? '<p class="forecast"><strong>Previsão:</strong> ' + esc(r.forecast.text) + '</p>' : '') +
         '</article>' +
         decision + proposal +
-        accept +
+        accept + change +
         '<div class="panel"><h3>Critérios de pronto</h3>' +
           (criteria ? '<ul class="checklist">' + criteria + '</ul>' : '<p class="empty">Nenhum critério definido.</p>') +
         '</div>' +
@@ -758,6 +877,10 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     }).join('');
   }
 
+  function showSuggestError(text) {
+    document.getElementById('suggest-error').innerHTML = text ? noticeHtml('error', 'Não deu para sugerir critérios.', text) : '';
+  }
+
   function showNewError(text) {
     document.getElementById('new-error').innerHTML = text ? noticeHtml('error', 'Não foi possível enviar.', text) : '';
   }
@@ -799,6 +922,102 @@ table.skipped th { color: var(--muted); font-weight: 600; }
       '</div>';
   }
 
+  // ---------- objetivos ----------
+  // Date-only strings (YYYY-MM-DD) are parsed as local dates so they do not shift a day.
+  function dayBr(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return dateBr(iso);
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function percentOf(v) {
+    return Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+  }
+
+  function loadGoals() {
+    var list = document.getElementById('goals-list');
+    list.innerHTML = '<p class="loading">Carregando objetivos…</p>';
+    return api('/api/portal/goals').then(function (items) {
+      state.goals = (Array.isArray(items) ? items : []).filter(function (p) { return p && p.goal; });
+      renderGoals();
+      renderGoalOptions();
+    }).catch(function (err) {
+      list.innerHTML = noticeHtml('error', 'Não deu para carregar os objetivos.', err.message);
+    });
+  }
+
+  function renderGoals() {
+    var list = document.getElementById('goals-list');
+    if (!state.goals.length) {
+      list.innerHTML = '<p class="empty">Você ainda não tem objetivos. Crie um abaixo para agrupar pedidos que levam ao mesmo resultado.</p>';
+      return;
+    }
+    list.innerHTML = '<ul class="list">' + state.goals.map(function (p) {
+      var g = p.goal;
+      var total = Number(p.total) || 0;
+      var accepted = Number(p.accepted) || 0;
+      var pct = percentOf(p.percent);
+      var label = accepted + ' de ' + total + ' entregues (' + pct + '%)';
+      return '<li><div class="goal-body">' +
+        '<h3>' + esc(g.title) + '</h3>' +
+        '<p class="row-meta">' +
+          '<span>' + esc(g.targetDate ? 'Data alvo: ' + dayBr(g.targetDate) : 'Sem data alvo') + '</span>' +
+          '<span>Gasto: ' + esc(usdFmt.format(Number(p.spentUsd) || 0)) + '</span>' +
+          '<span>Em andamento: ' + esc(Number(p.inProgress) || 0) + '</span>' +
+        '</p>' +
+        (g.description ? '<p class="small" style="margin:6px 0 0">' + esc(g.description) + '</p>' : '') +
+        '<div class="progress" role="progressbar" aria-label="' + esc('Progresso: ' + g.title) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-valuetext="' + esc(label) + '">' +
+          '<span style="width:' + pct + '%"></span></div>' +
+        '<p class="progress-text">' + esc(label) + '</p>' +
+        (total ? '' : '<p class="hint">Crie um pedido e escolha este objetivo na lista.</p>') +
+        '<div class="btn-row"><button type="button" class="secondary small-btn" data-action="goal-requests" data-id="' + esc(g.id) + '">Ver pedidos</button></div>' +
+      '</div></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderGoalOptions() {
+    var sel = document.getElementById('new-goal');
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Nenhum objetivo</option>' + state.goals.map(function (p) {
+      return '<option value="' + esc(p.goal.id) + '">' + esc(p.goal.title) + '</option>';
+    }).join('');
+    sel.value = current;
+  }
+
+  function renderGoalFilter() {
+    var box = document.getElementById('goal-filter');
+    var f = state.goalFilter;
+    box.innerHTML = f ?
+      '<div class="chip-row"><span class="chip">Objetivo: ' + esc(f.title) +
+        ' <button type="button" class="secondary small-btn" data-action="clear-goal-filter" aria-label="Limpar filtro do objetivo ' + esc(f.title) + '">Limpar filtro</button></span></div>' :
+      '';
+  }
+
+  document.getElementById('goal-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var errBox = document.getElementById('goal-error');
+    errBox.innerHTML = '';
+    var title = document.getElementById('goal-title').value.trim();
+    var description = document.getElementById('goal-description').value.trim();
+    var target = document.getElementById('goal-target').value;
+    if (!title) {
+      errBox.innerHTML = noticeHtml('error', 'Não foi possível criar.', 'Dê um nome ao objetivo.');
+      document.getElementById('goal-title').focus();
+      return;
+    }
+    var submit = document.getElementById('goal-submit');
+    submit.disabled = true;
+    api('/api/portal/goals', { method: 'POST', body: { title: title, description: description, targetDate: target || null } }).then(function () {
+      document.getElementById('goal-form').reset();
+      setGlobal('ok', 'Objetivo criado. Você já pode escolhê-lo em um novo pedido.');
+      return loadGoals();
+    }).catch(function (err) {
+      errBox.innerHTML = noticeHtml('error', 'Não foi possível criar.', err.message);
+    }).then(function () {
+      submit.disabled = false;
+    });
+  });
+
   // ---------- event wiring ----------
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-action]');
@@ -812,6 +1031,90 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     if (action === 'open-request') return openRequest(id);
     if (action === 'back-list') { showList(); return loadRequests(); }
     if (action === 'refresh-detail') return renderDetail(id);
+
+    if (action === 'toggle-change') {
+      state.changeOpen = !state.changeOpen;
+      if (!state.changeOpen) { state.changeCriteria = null; state.changeReason = ''; }
+      return renderDetail(state.currentRequestId);
+    }
+
+    if (action === 'add-change-criterion') {
+      if (!state.changeCriteria) state.changeCriteria = [];
+      state.changeCriteria.push('');
+      return renderDetail(state.currentRequestId).then(function () {
+        var inputs = document.querySelectorAll('#change-criteria input');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+      });
+    }
+
+    if (action === 'remove-change-criterion') {
+      state.changeCriteria.splice(Number(el.getAttribute('data-idx')), 1);
+      return renderDetail(state.currentRequestId);
+    }
+
+    if (action === 'submit-change') {
+      var changeList = (state.changeCriteria || []).map(function (c) { return String(c).trim(); }).filter(Boolean);
+      var reasonBox = document.getElementById('change-reason');
+      var changeReason = reasonBox ? reasonBox.value.trim() : '';
+      if (!changeList.length) { detailMsg('error', 'Inclua pelo menos um critério.'); return; }
+      if (!changeReason) { detailMsg('error', 'Explique por que quer mudar o pedido.'); if (reasonBox) reasonBox.focus(); return; }
+      el.disabled = true;
+      detailMsg('ok', '');
+      return api('/api/portal/requests/' + encodeURIComponent(id) + '/change', {
+        method: 'POST', body: { criteria: changeList, reason: changeReason }
+      }).then(function () {
+        state.changeOpen = false;
+        state.changeCriteria = null;
+        state.changeReason = '';
+        return refreshAfterAction(id).then(function () {
+          detailMsg('ok', 'Mudança enviada. O time vai fazer uma nova proposta.');
+        });
+      }).catch(function (err) {
+        el.disabled = false;
+        detailMsg('error', err.message);
+      });
+    }
+
+    if (action === 'suggest-criteria') {
+      var sTitle = document.getElementById('new-title-input').value.trim();
+      var sDesc = document.getElementById('new-description').value.trim();
+      var sTpl = document.getElementById('new-template').value;
+      var sStatus = document.getElementById('suggest-status');
+      showSuggestError('');
+      if (!sTitle && !sDesc) { showSuggestError('Escreva um título ou uma descrição para sugerir critérios.'); return; }
+      var sBody = { title: sTitle, description: sDesc };
+      if (sTpl) sBody.templateId = sTpl;
+      el.disabled = true;
+      el.textContent = 'Sugerindo…';
+      sStatus.textContent = 'Estamos pensando nos critérios. Isso pode levar alguns segundos.';
+      return api('/api/portal/suggest-criteria', { method: 'POST', body: sBody }).then(function (res) {
+        var list = (res && Array.isArray(res.criteria) ? res.criteria : [])
+          .map(function (c) { return String(c).trim(); }).filter(Boolean);
+        if (!list.length) { sStatus.textContent = 'Não encontramos sugestões. Escreva os critérios à mão.'; return; }
+        state.criteria = list;
+        renderCriteria();
+        sStatus.textContent = 'Critérios sugeridos. Revise antes de enviar.';
+      }).catch(function (err) {
+        sStatus.textContent = '';
+        showSuggestError(err.message);
+      }).then(function () {
+        el.disabled = false;
+        el.textContent = 'Sugerir critérios';
+      });
+    }
+
+    if (action === 'refresh-goals') return loadGoals();
+
+    if (action === 'goal-requests') {
+      var gp = (state.goals || []).filter(function (p) { return p.goal.id === id; })[0];
+      return showTab('requests', { id: id, title: gp ? gp.goal.title : 'Objetivo' });
+    }
+
+    if (action === 'clear-goal-filter') {
+      state.goalFilter = null;
+      showList();
+      return loadRequests();
+    }
 
     if (action === 'decide') {
       var decision = el.getAttribute('data-decision');
@@ -868,6 +1171,10 @@ table.skipped th { color: var(--muted); font-weight: 600; }
     if (e.target.matches && e.target.matches('#criteria-list input')) {
       state.criteria[Number(e.target.getAttribute('data-idx'))] = e.target.value;
     }
+    if (e.target.matches && e.target.matches('#change-criteria input')) {
+      state.changeCriteria[Number(e.target.getAttribute('data-idx'))] = e.target.value;
+    }
+    if (e.target.id === 'change-reason') state.changeReason = e.target.value;
   });
 
   document.getElementById('new-template').addEventListener('change', function (e) {
@@ -900,6 +1207,8 @@ table.skipped th { color: var(--muted); font-weight: 600; }
 
     var body = { title: title, description: description, criteria: criteria };
     if (templateId) body.templateId = templateId;
+    var goalId = document.getElementById('new-goal').value;
+    if (goalId) body.goalId = goalId;
     if (budget !== undefined) body.budgetBrl = budget;
 
     var submit = document.getElementById('new-submit');

@@ -39,6 +39,9 @@ Transporte *Streamable HTTP* com respostas JSON (sem SSE): JSON-RPC 2.0 no corpo
 | `aprovar_entrega` | `{ id }` | aceita |
 | `pedir_ajustes` | `{ id, motivo }` | rejeita |
 | `visao_geral` | `{}` | resumo do mês |
+| `mudar_pedido` | `{ id, criterios: string[] (mín. 1), motivo }` | `POST /api/portal/requests/:id/change` (só aprovador); volta para definição |
+| `listar_objetivos` | `{}` | objetivos com progresso (`GET /api/portal/goals`) |
+| `criar_objetivo` | `{ titulo, descricao?, data_alvo? }` | `POST /api/portal/goals` |
 
 ### Ferramentas do dev (chamam `/api/*` com `{ role: 'dev', agent }`)
 

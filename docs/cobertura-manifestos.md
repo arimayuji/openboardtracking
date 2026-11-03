@@ -67,14 +67,14 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 | Sprint Planning | Decidir o quê, por quê e como | ✅ | Negociação: cliente define o quê e por quê, dev define como e quanto custa. |
 | Daily Scrum | Inspecionar progresso e replanejar | ✅ | Telemetria de consumo durante `building` e `summary`. |
 | Sprint Review | Inspecionar o resultado com stakeholders | 🟡 | Aceite por contrato existe. Falta visão agregada do que foi entregue no período **para o cliente humano**, além do JSON. |
-| Sprint Retrospective | Melhorar qualidade e eficácia | ❌ | Não existe. Ver princípio 12. |
+| Sprint Retrospective | Melhorar qualidade e eficácia | ✅ | Retrospectiva automática: rejeições, escalonamentos, viés de estimativa, recorrências e parados, com sugestões. |
 
 ### Artefatos e compromissos
 
 | Artefato / compromisso | Status | Observação |
 |---|---|---|
 | Product Backlog | 🟡 | Contratos em `negotiating` funcionam como backlog. Falta refinamento (quebrar intent grande em vários contratos) e dependências entre contratos. |
-| Product Goal | ❌ | Não há objetivo de produto acima dos contratos. Contratos soltos sem direção comum. |
+| Product Goal | ✅ | Objetivos de produto agrupam pedidos e mostram progresso e gasto. |
 | Sprint Backlog / Sprint Goal | ➖ | Sem sprint. O papel de foco é feito pelo plano de cada contrato. |
 | Increment | 🟡 | Cada contrato aceito é um incremento. Falta garantir que ele é **integrável e utilizável** junto com os outros (release, integração). |
 | Definition of Done | ✅ | DoD global (`/api/config`), copiada para cada contrato na criação, exigida no aceite. |
@@ -102,9 +102,9 @@ Estado avaliado: `main` após o PR #1, com os gaps 1 e 2 resolvidos no PR #2.
 
 1. ~~Limite de WIP e métricas de fluxo~~ (resolvido no PR #2)
 2. ~~Definition of Done global~~ (resolvido no PR #2; ainda autodeclarada)
-3. **Retrospectiva automática**: aprender com rejeições, escalonamentos e estouros de orçamento, e propor ajustes.
-4. **Mudança de escopo durante a execução** (*change request* em `building`), sem precisar rejeitar ou escalar.
-5. **Product Goal e refinamento**: objetivo acima dos contratos, decomposição de intents grandes e dependências.
+3. ~~Retrospectiva automática~~ (resolvido: `/api/retro` e "O que aprender" no resumo do Slack)
+4. ~~Mudança de escopo durante a execução~~ (resolvido: "Mudar o pedido" volta para definição sem perder o consumo)
+5. **Product Goal e refinamento**: objetivos de produto resolvidos; faltam decomposição de pedidos grandes e dependências.
 6. **Valor explícito por intent**, para ordenar o backlog por valor ÷ custo calibrado, e corte de escopo de baixo valor.
 7. ~~Classe de serviço expedite~~ (resolvido junto com a entrada de alertas e bugs)
 8. **Visão de review para o cliente humano**: parcialmente coberta pelo resumo diário no Slack; falta uma visão por período no painel.
