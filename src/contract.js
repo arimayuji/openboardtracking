@@ -3,7 +3,6 @@
 // path (escalation), not the bridge.
 //
 // Capacity is measured in what AI work actually consumes: hours, tokens and money.
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { calibrate } from './estimate.js';
 
@@ -36,6 +35,8 @@ export const DEFAULT_CONFIG = {
   // pricing: USD per million tokens, per model. Set by humans; no built-in prices,
   //   because they change. Models without a price are recorded with cost unknown.
   //   { "<model>": { input, output, cacheRead?, cacheWrite? } }
+  // fx: currency conversion for client-facing views, set by humans. { usdToBrl: number }
+  fx: { usdToBrl: null },
   usageSource: 'reported',
   pricing: {},
   wip: { building: 5, perAgent: 2, escalated: 3, expedite: 1 },
@@ -59,10 +60,13 @@ const RULES = {
 };
 
 export class Contracts {
-  constructor(file = null, config = {}) {
-    this.file = file;
-    this.state = { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
-    if (file && existsSync(file)) this.state = JSON.parse(readFileSync(file, 'utf8'));
+  // storage: null (memory only) or { state?: object, persist?: (state) => void }.
+  // Keeps the core runtime-agnostic: Node uses a file (src/file-store.js),
+  // Cloudflare uses Durable Object storage (worker/).
+  constructor(storage = null, config = {}) {
+    if (typeof storage === 'string') throw new Error('pass fileStore(path) from src/file-store.js instead of a path');
+    this.persist = storage?.persist ?? null;
+    this.state = storage?.state ?? { contracts: [], events: [], config: { ...structuredClone(DEFAULT_CONFIG), ...config } };
     this.state.config = { ...structuredClone(DEFAULT_CONFIG), ...this.state.config };
     this.listeners = [];
   }
@@ -81,7 +85,7 @@ export class Contracts {
   get config() { return this.state.config; }
 
   // Only humans change organization rules.
-  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing }, actor) {
+  updateConfig({ wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx }, actor) {
     if (actor.role !== 'human') throw httpError(403, 'only human can change organization config');
     if (wip) this.config.wip = { ...this.config.wip, ...wip };
     if (verifiedOnly) this.config.verifiedOnly = [...verifiedOnly];
@@ -92,18 +96,19 @@ export class Contracts {
       this.config.usageSource = usageSource;
     }
     if (pricing) this.config.pricing = { ...this.config.pricing, ...pricing };
+    if (fx) this.config.fx = { ...this.config.fx, ...fx };
     if (dod) {
       if (!Array.isArray(dod)) throw httpError(400, 'dod must be a list');
       this.config.dod = dod.map((d, i) => (typeof d === 'string' ? { id: `dod-${i + 1}`, text: d } : d));
     }
-    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing }, at: now() };
+    const ev = { id: randomUUID(), type: 'config', contractId: null, role: actor.role, agent: actor.agent, data: { wip, dod, verifiedOnly, github, slack, usageSource, pricing, fx }, at: now() };
     this.state.events.push(ev);
     this.emit(ev);
     this.save();
     return this.config;
   }
 
-  save() { if (this.file) writeFileSync(this.file, JSON.stringify(this.state, null, 2)); }
+  save() { if (this.persist) this.persist(this.state); }
 
   log(type, c, actor, data = {}) {
     const ev = { id: randomUUID(), type, contractId: c.id, role: actor.role, agent: actor.agent, data, at: now() };
@@ -144,14 +149,14 @@ export class Contracts {
     return this.createContract(args, actor);
   }
 
-  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null }, actor) {
+  createContract({ title, goal = '', criteria = [], priority = 2, budget = {}, irreversible = false, kind = 'feature', classOfService = 'standard', source = null, area = null, sensitive = null }, actor) {
     if (!KINDS.includes(kind)) throw httpError(400, `kind must be one of ${KINDS.join(', ')}`);
     if (!CLASSES.includes(classOfService)) throw httpError(400, `classOfService must be one of ${CLASSES.join(', ')}`);
     if (!title) throw httpError(400, 'title is required');
     if (!criteria.length) throw httpError(400, 'at least one acceptance criterion is required');
     const c = {
       id: randomUUID().slice(0, 8), title, goal, priority: Number(priority), budget: pickMetrics(budget), irreversible,
-      kind, classOfService, source, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
+      kind, classOfService, source, area, sensitive, occurrences: source ? 1 : 0, lastSeenAt: source ? now() : null,
       state: 'negotiating', rounds: 0,
       dod: structuredClone(this.config.dod), links: [], verified: {},
       proposal: { version: 1, by: 'client', criteria: normCriteria(criteria), estimate: {}, calibrated: null, plan: '' },
@@ -406,6 +411,32 @@ export class Contracts {
     c.state = 'delivered';
     this.log('deliver', c, actor, { links, auto: true });
     this.save();
+    return c;
+  }
+
+  // Historical work brought in from another tool (see src/importers.js). Only humans import.
+  // Does not open WIP or escalation; the caller saves once after a batch.
+  importContract(fields, actor) {
+    if (actor.role !== 'human') throw httpError(403, 'only human can import history');
+    const at = fields.createdAt ?? now();
+    const c = {
+      id: randomUUID().slice(0, 8), title: fields.title, goal: '', priority: 2, budget: {}, irreversible: false,
+      kind: fields.kind ?? 'feature', classOfService: 'standard', source: fields.source ?? null, occurrences: 0, lastSeenAt: null,
+      state: 'negotiating', rounds: 0,
+      dod: structuredClone(this.config.dod), links: [], verified: {},
+      proposal: {
+        version: 1, by: 'client', criteria: normCriteria(fields.criteria ?? ['imported']),
+        estimate: fields.estimateHours != null ? { hours: fields.estimateHours } : {}, calibrated: null, plan: '',
+      },
+      usage: { ...emptyUsage(), hours: fields.actualHours ?? 0 },
+      agreedBy: [], delivery: null, escalation: null, createdAt: at, updatedAt: at,
+    };
+    Object.assign(c, {
+      state: fields.state ?? 'negotiating', assignee: fields.assignee ?? null, startedAt: fields.startedAt ?? null,
+      acceptedAt: fields.acceptedAt ?? null, delivery: fields.delivery ?? null,
+    });
+    this.state.contracts.push(c);
+    this.log('import', c, actor, { title: c.title, format: c.source?.format ?? null });
     return c;
   }
 

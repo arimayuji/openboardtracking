@@ -14,10 +14,6 @@
 import { httpError } from './contract.js';
 
 const ACTOR = { role: 'integration', agent: 'usage-proxy' };
-const UPSTREAM = {
-  anthropic: () => process.env.ANTHROPIC_UPSTREAM_URL ?? 'https://api.anthropic.com',
-  openai: () => process.env.OPENAI_UPSTREAM_URL ?? 'https://api.openai.com',
-};
 const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'keep-alive', 'accept-encoding']);
 
 // ---- usage extraction (pure) ----
@@ -92,54 +88,84 @@ export function toContractUsage(u, costUsd) {
   return { tokensIn, tokensOut: u.output, tokens: tokensIn + u.output, costUsd, model: u.model, toolCalls: 0 };
 }
 
-// ---- HTTP handler ----
+// ---- HTTP handler (Fetch API: runs in Node and in Cloudflare Workers) ----
 
-export async function proxyRequest(store, req, res, { fetchImpl = globalThis.fetch } = {}) {
-  const url = new URL(req.url, 'http://x');
+const UPSTREAM = {
+  anthropic: (env) => env.ANTHROPIC_UPSTREAM_URL ?? 'https://api.anthropic.com',
+  openai: (env) => env.OPENAI_UPSTREAM_URL ?? 'https://api.openai.com',
+};
+const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
+
+// Forwards the request to the provider and streams the response back unchanged.
+// Usage is read while the bytes pass and recorded when the stream ends. If the client
+// disconnects early, the upstream is still drained so the call is still recorded.
+export async function proxyFetch(store, request, { fetchImpl = globalThis.fetch, env = {} } = {}) {
+  const url = new URL(request.url);
   const [, , provider, ...rest] = url.pathname.split('/'); // /proxy/<provider>/...
-  if (!UPSTREAM[provider]) throw httpError(404, `unknown provider ${provider}`);
-  const id = req.headers['x-obt-contract'];
+  if (!Object.hasOwn(UPSTREAM, provider)) throw httpError(404, `unknown provider ${provider}`);
+  const id = request.headers.get('x-obt-contract');
   if (!id) throw httpError(400, 'x-obt-contract header is required');
   const c = store.get(id);
   if (c.state !== 'building') throw httpError(409, `contract ${id} is not building`);
 
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
   const headers = {};
-  for (const [k, v] of Object.entries(req.headers)) {
+  for (const [k, v] of request.headers) {
     if (!HOP_BY_HOP.has(k) && !k.startsWith('x-obt-')) headers[k] = v;
   }
-  const target = `${UPSTREAM[provider]()}/${rest.join('/')}${url.search}`;
-  const upstream = await fetchImpl(target, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+  const bytes = request.method === 'GET' || request.method === 'HEAD'
+    ? new Uint8Array(0)
+    : new Uint8Array(await request.arrayBuffer());
+  const target = `${UPSTREAM[provider](env)}/${rest.join('/')}${url.search}`;
+  const upstream = await fetchImpl(target, { method: request.method, headers, body: bytes.byteLength ? bytes : undefined });
 
-  const outHeaders = {};
-  upstream.headers.forEach((v, k) => { if (!HOP_BY_HOP.has(k) && k !== 'content-encoding') outHeaders[k] = v; });
-  res.writeHead(upstream.status, outHeaders);
-
-  const isSse = (upstream.headers.get('content-type') ?? '').includes('text/event-stream');
-  const sse = isSse ? new SseUsage(provider) : null;
+  const outHeaders = new Headers();
+  upstream.headers.forEach((v, k) => { if (!HOP_BY_HOP.has(k) && k !== 'content-encoding') outHeaders.set(k, v); });
+  const sse = (upstream.headers.get('content-type') ?? '').includes('text/event-stream') ? new SseUsage(provider) : null;
   const decoder = new TextDecoder();
   let jsonText = '';
-  if (upstream.body) {
-    for await (const chunk of upstream.body) {
-      res.write(chunk);
-      const text = decoder.decode(chunk, { stream: true });
-      if (sse) sse.push(text);
-      else jsonText += text;
-    }
-  }
-  res.end();
+  const observe = (chunk) => {
+    const text = decoder.decode(chunk, { stream: true });
+    if (sse) sse.push(text); else jsonText += text;
+  };
 
-  if (upstream.status >= 400) return null;
-  let u = null;
-  if (sse) { sse.push('\n'); u = sse.usage; }
-  else { try { u = usageFromJson(provider, JSON.parse(jsonText)); } catch { u = null; } }
-  if (!u) return null;
-  const usage = toContractUsage(u, priceUsage(store.config.pricing, u));
-  // The contract may have changed state while the call ran (e.g. escalated); keep the record anyway.
-  try { store.recordVerifiedUsage(id, usage, { ...ACTOR, agent: `usage-proxy:${provider}` }); }
-  catch (e) { console.error('usage not recorded:', e.message); }
-  return usage;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    const tail = decoder.decode();
+    if (upstream.status >= 400) return;
+    let u = null;
+    if (sse) { sse.push(tail + '\n'); u = sse.usage; }
+    else {
+      jsonText += tail;
+      try { u = usageFromJson(provider, JSON.parse(jsonText)); } catch { u = null; }
+    }
+    if (!u) return;
+    const usage = toContractUsage(u, priceUsage(store.config.pricing, u));
+    // The contract may have changed state while the call ran (e.g. escalated); keep the record anyway.
+    try { store.recordVerifiedUsage(id, usage, { ...ACTOR, agent: `usage-proxy:${provider}` }); }
+    catch (e) { console.error('usage not recorded:', e.message); }
+  };
+
+  const reader = upstream.body ? upstream.body.getReader() : null;
+  const body = new ReadableStream({
+    async pull(controller) {
+      const { done, value } = reader ? await reader.read() : { done: true };
+      if (done) { finish(); controller.close(); return; }
+      observe(value);
+      controller.enqueue(value);
+    },
+    async cancel() {
+      // Client went away: keep reading the upstream so the usage is still recorded.
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        observe(value);
+      }
+      finish();
+    },
+  });
+  return new Response(NULL_BODY_STATUS.has(upstream.status) ? null : body, { status: upstream.status, headers: outHeaders });
 }
 
 const n = (v) => Number(v) || 0;

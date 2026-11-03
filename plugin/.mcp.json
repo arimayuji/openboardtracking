@@ -1,0 +1,1 @@
+{"mcpServers":{"openboardtracking":{"type":"http","url":"${OBT_MCP_URL}","headers":{"Authorization":"Bearer ${OBT_TOKEN}"}}}}

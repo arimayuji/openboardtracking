@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal do cliente</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --text: #1c2330;
+  --muted: #4f5a6b;
+  --border: #d9dee6;
+  --accent: #1f5fbf;
+  --accent-text: #ffffff;
+  --focus: #0b57d0;
+  --danger: #a11d1d;
+  --neutral-bg: #e6e9ee;   --neutral-fg: #37404d;
+  --progress-bg: #dfeaff;  --progress-fg: #15449a;
+  --attention-bg: #fff0cc; --attention-fg: #6b4300;
+  --success-bg: #d9f2e1;   --success-fg: #155a2e;
+  --danger-bg: #fde0df;    --danger-fg: #8c1717;
+  --notice-info-bg: #e6eefb;
+  --notice-error-bg: #fde0df;
+  --notice-error-border: #c2412f;
+  --notice-ok-bg: #d9f2e1;
+  --notice-ok-border: #2a7a45;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c;
+    --surface: #1a202a;
+    --surface-2: #232b37;
+    --text: #e6eaf1;
+    --muted: #b2bbc9;
+    --border: #334055;
+    --accent: #7fb0ff;
+    --accent-text: #0c1220;
+    --focus: #a6c8ff;
+    --danger: #ff9b98;
+    --neutral-bg: #2d3644;   --neutral-fg: #d5dbe5;
+    --progress-bg: #1d3560;  --progress-fg: #bcd6ff;
+    --attention-bg: #4a3a12; --attention-fg: #ffe0a3;
+    --success-bg: #163d26;   --success-fg: #b6ebc8;
+    --danger-bg: #4a1c1c;    --danger-fg: #ffc4c2;
+    --notice-info-bg: #1d2b44;
+    --notice-error-bg: #4a1c1c;
+    --notice-error-border: #ff8a80;
+    --notice-ok-bg: #163d26;
+    --notice-ok-border: #4cb476;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11151c;
+  --surface: #1a202a;
+  --surface-2: #232b37;
+  --text: #e6eaf1;
+  --muted: #b2bbc9;
+  --border: #334055;
+  --accent: #7fb0ff;
+  --accent-text: #0c1220;
+  --focus: #a6c8ff;
+  --danger: #ff9b98;
+  --neutral-bg: #2d3644;   --neutral-fg: #d5dbe5;
+  --progress-bg: #1d3560;  --progress-fg: #bcd6ff;
+  --attention-bg: #4a3a12; --attention-fg: #ffe0a3;
+  --success-bg: #163d26;   --success-fg: #b6ebc8;
+  --danger-bg: #4a1c1c;    --danger-fg: #ffc4c2;
+  --notice-info-bg: #1d2b44;
+  --notice-error-bg: #4a1c1c;
+  --notice-error-border: #ff8a80;
+  --notice-ok-bg: #163d26;
+  --notice-ok-border: #4cb476;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+h1, h2, h3 { line-height: 1.25; margin: 0 0 10px; }
+h1 { font-size: 1.35rem; font-weight: 700; }
+h2 { font-size: 1.25rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 650; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.9rem; }
+
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+header.app {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+.app-head {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px; padding-top: 12px; padding-bottom: 8px;
+}
+.app-head .who { color: var(--muted); font-size: 0.9rem; min-width: 0; }
+.app-head .who strong { color: var(--text); font-weight: 600; }
+
+nav.tabs {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding-bottom: 8px;
+}
+nav.tabs button {
+  min-height: 44px; padding: 8px 14px;
+  border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--muted);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+nav.tabs button:hover { color: var(--text); background: var(--surface-2); }
+nav.tabs button[aria-current="page"] {
+  color: var(--accent); border-color: var(--border); background: var(--surface-2);
+}
+
+main.wrap { padding: 20px 16px 48px; }
+section.view[hidden] { display: none; }
+.view-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; margin-bottom: 14px;
+}
+
+.cards {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-bottom: 16px;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; min-width: 0;
+}
+.stat .label { color: var(--muted); font-size: 0.88rem; margin: 0 0 4px; }
+.stat .value { font-size: 1.35rem; font-weight: 700; margin: 0; }
+button.stat {
+  text-align: left; font: inherit; color: inherit; cursor: pointer; width: 100%;
+  background: var(--surface); border: 1px solid var(--border); min-height: 0; padding: 14px; font-weight: 400;
+}
+button.stat:hover { border-color: var(--accent); }
+
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 0.88rem; font-weight: 600; white-space: nowrap;
+}
+.tone-neutral { background: var(--neutral-bg); color: var(--neutral-fg); }
+.tone-progress { background: var(--progress-bg); color: var(--progress-fg); }
+.tone-attention { background: var(--attention-bg); color: var(--attention-fg); }
+.tone-success { background: var(--success-bg); color: var(--success-fg); }
+.tone-danger { background: var(--danger-bg); color: var(--danger-fg); }
+.tag {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 0.82rem; border: 1px solid var(--border); color: var(--muted);
+}
+
+ul.list, ol.list { list-style: none; margin: 0; padding: 0; }
+ul.list > li {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 10px;
+}
+ul.list > li.needs {
+  border-color: var(--attention-fg); border-width: 2px;
+}
+.row-btn {
+  display: block; width: 100%; text-align: left; padding: 14px 16px;
+  background: transparent; border: 0; color: inherit; font: inherit; cursor: pointer;
+  border-radius: 12px;
+}
+.row-btn:hover { background: var(--surface-2); }
+.row-title { font-weight: 650; margin: 6px 0 4px; }
+.row-meta { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.row-meta span + span::before { content: " · "; }
+.forecast { font-size: 0.95rem; margin: 6px 0 0; }
+.needs-flag { color: var(--attention-fg); font-weight: 650; font-size: 0.92rem; }
+
+button, .btn {
+  min-height: 44px; padding: 10px 16px;
+  border-radius: 8px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--accent-text);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+button:hover:not(:disabled) { filter: brightness(1.06); }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+button.secondary { background: transparent; color: var(--accent); }
+button.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+button.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+button.small-btn { min-height: 36px; padding: 6px 10px; font-weight: 600; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+
+label, .label { display: block; font-weight: 600; margin: 0 0 6px; }
+.hint { color: var(--muted); font-size: 0.9rem; margin: 4px 0 0; }
+input[type="text"], input[type="number"], input[type="file"], select, textarea {
+  width: 100%; min-height: 44px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  font: inherit;
+}
+textarea { min-height: 96px; resize: vertical; }
+.field { margin-bottom: 16px; }
+
+ul.criteria { list-style: none; margin: 0; padding: 0; }
+ul.criteria li { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+ul.criteria li input { flex: 1 1 auto; min-width: 0; }
+ul.criteria li button { flex: 0 0 auto; }
+
+ul.checklist { list-style: none; margin: 0; padding: 0; }
+ul.checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
+.mark {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; font-weight: 700; font-size: 0.85rem;
+  border: 2px solid var(--muted); color: var(--muted);
+}
+.mark.done { background: var(--success-bg); border-color: var(--success-fg); color: var(--success-fg); }
+
+ol.timeline { list-style: none; margin: 0; padding: 0 0 0 16px; border-left: 2px solid var(--border); }
+ol.timeline li { position: relative; padding: 0 0 14px 14px; }
+ol.timeline li::before {
+  content: ""; position: absolute; left: -23px; top: 5px;
+  width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+}
+ol.timeline .at { color: var(--muted); font-size: 0.88rem; margin: 0; }
+
+.notice {
+  padding: 12px 14px; border-radius: 8px; margin: 0 0 14px;
+  border: 1px solid var(--border); background: var(--notice-info-bg);
+}
+.notice.error { background: var(--notice-error-bg); border-color: var(--notice-error-border); }
+.notice.ok { background: var(--notice-ok-bg); border-color: var(--notice-ok-border); }
+.notice strong { display: block; margin-bottom: 2px; }
+
+.loading, .empty { color: var(--muted); padding: 12px 0; }
+.decision-box {
+  border: 2px solid var(--attention-fg); border-radius: 12px; padding: 14px;
+  background: var(--attention-bg); color: var(--attention-fg); margin-bottom: 14px;
+}
+.decision-box p { color: var(--text); }
+.decision-box strong { color: var(--text); }
+
+.reveal { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.sens {
+  display: inline-block; margin: 6px 0 0; padding: 2px 8px; border-radius: 6px;
+  font-size: 0.85rem; font-weight: 600;
+  background: var(--attention-bg); color: var(--attention-fg);
+}
+.sens.sigilo { background: var(--danger-bg); color: var(--danger-fg); }
+.grouped-note { color: var(--muted); font-size: 0.9rem; margin: 4px 0 0; }
+
+table.skipped { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+table.skipped th, table.skipped td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.skipped th { color: var(--muted); font-weight: 600; }
+.stats-inline { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 14px; }
+.stats-inline .stat { flex: 1 1 130px; }
+
+@media (max-width: 480px) {
+  .wrap { padding: 0 16px; }
+  .btn-row button { flex: 1 1 100%; }
+  nav.tabs button { flex: 1 1 auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="wrap">
+    <div class="app-head">
+      <h1>Portal do cliente</h1>
+      <p class="who" id="who" aria-live="polite">Carregando sua conta…</p>
+    </div>
+    <nav class="tabs" aria-label="Seções do portal">
+      <button type="button" data-tab="home" aria-current="page">Início</button>
+      <button type="button" data-tab="requests">Pedidos</button>
+      <button type="button" data-tab="new">Novo pedido</button>
+      <button type="button" data-tab="import">Importar histórico</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="global-msg" role="status" aria-live="polite"></div>
+
+  <!-- INÍCIO -->
+  <section class="view" id="view-home" aria-labelledby="home-title">
+    <div class="view-head">
+      <h2 id="home-title">Início</h2>
+      <button type="button" class="ghost small-btn" data-action="refresh-home">Atualizar</button>
+    </div>
+    <div id="home-body"><p class="loading">Carregando resumo…</p></div>
+  </section>
+
+  <!-- PEDIDOS -->
+  <section class="view" id="view-requests" aria-labelledby="requests-title" hidden>
+    <div id="requests-list-wrap">
+      <div class="view-head">
+        <h2 id="requests-title">Pedidos</h2>
+        <button type="button" class="ghost small-btn" data-action="refresh-requests">Atualizar</button>
+      </div>
+      <div id="requests-list"><p class="loading">Carregando pedidos…</p></div>
+    </div>
+    <div id="request-detail" hidden></div>
+  </section>
+
+  <!-- NOVO PEDIDO -->
+  <section class="view" id="view-new" aria-labelledby="new-title" hidden>
+    <h2 id="new-title">Novo pedido</h2>
+    <p class="muted">Escolha um modelo pronto ou comece do zero. Você pode ajustar tudo antes de enviar.</p>
+    <div id="new-error"></div>
+    <form id="new-form" class="panel" novalidate>
+      <div class="field">
+        <label for="new-template">Modelo</label>
+        <select id="new-template" name="templateId">
+          <option value="">Começar do zero</option>
+        </select>
+        <div id="template-info"></div>
+      </div>
+
+      <div class="field">
+        <label for="new-title-input">Título</label>
+        <input type="text" id="new-title-input" name="title" maxlength="160" autocomplete="off" required>
+      </div>
+
+      <div class="field">
+        <label for="new-description">Descrição</label>
+        <textarea id="new-description" name="description" rows="5" placeholder="Explique o resultado que você quer, em português simples."></textarea>
+      </div>
+
+      <div class="field">
+        <span class="label" id="criteria-label">Como vamos saber que está pronto?</span>
+        <p class="hint" id="criteria-hint">Cada item é verificado antes da entrega chegar até você.</p>
+        <ul class="criteria" id="criteria-list" aria-labelledby="criteria-label"></ul>
+        <div class="btn-row">
+          <button type="button" class="secondary small-btn" data-action="add-criterion">Adicionar critério</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="new-budget">Orçamento máximo (R$) <span class="muted">(opcional)</span></label>
+        <input type="text" id="new-budget" name="budgetBrl" inputmode="decimal" placeholder="Ex.: 2500,00" aria-describedby="budget-hint">
+        <p class="hint" id="budget-hint">Se o custo previsto passar desse valor, pediremos sua decisão antes de seguir.</p>
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" id="new-submit">Enviar pedido</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- IMPORTAR HISTÓRICO -->
+  <section class="view" id="view-import" aria-labelledby="import-title" hidden>
+    <h2 id="import-title">Importar histórico</h2>
+    <p>Importe projetos e tarefas que já foram feitos. Com o histórico, as previsões já começam calibradas com a sua realidade, em vez de partir do zero.</p>
+    <div id="import-error"></div>
+    <form id="import-form" class="panel" novalidate>
+      <div class="field">
+        <label for="import-format">De onde vêm os dados?</label>
+        <select id="import-format" name="format">
+          <option value="jira">Jira</option>
+          <option value="linear">Linear</option>
+          <option value="trello">Trello</option>
+          <option value="generic">Planilha genérica</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="import-file">Arquivo CSV</label>
+        <input type="file" id="import-file" name="file" accept=".csv,text/csv">
+        <p class="hint">Exporte o arquivo na ferramenta de origem e envie aqui.</p>
+      </div>
+
+      <div class="field">
+        <label for="import-hours">Horas por ponto <span class="muted">(opcional)</span></label>
+        <input type="number" id="import-hours" name="hoursPerPoint" min="0.1" step="0.5" value="4" inputmode="decimal" aria-describedby="hours-hint">
+        <p class="hint" id="hours-hint">Usado quando a estimativa vem em pontos de história. Padrão: 4 horas por ponto.</p>
+      </div>
+
+      <div class="btn-row">
+        <button type="submit" id="import-submit">Importar</button>
+      </div>
+    </form>
+    <div id="import-result" aria-live="polite"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- helpers ----------
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  var AREA_LABELS = {
+    rh: 'Recursos Humanos',
+    financas: 'Finanças e mercado',
+    saude: 'Saúde',
+    direito: 'Direito',
+    economia: 'Economia'
+  };
+
+  var FORMAT_LABELS = { jira: 'Jira', linear: 'Linear', trello: 'Trello', generic: 'Planilha genérica' };
+
+  var brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  var usdFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' });
+
+  function money(obj) {
+    if (!obj) return '—';
+    if (obj.brl != null) return brlFmt.format(obj.brl);
+    if (obj.usd != null) return usdFmt.format(obj.usd);
+    return '—';
+  }
+
+  function dateBr(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function dateTimeBr(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function badge(status) {
+    var s = status || {};
+    var tone = ['neutral', 'progress', 'attention', 'success', 'danger'].indexOf(s.tone) >= 0 ? s.tone : 'neutral';
+    return '<span class="badge tone-' + tone + '">' + esc(s.label || 'Sem situação') + '</span>';
+  }
+
+  function setGlobal(kind, text) {
+    var box = document.getElementById('global-msg');
+    if (!text) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="notice ' + (kind === 'error' ? 'error' : 'ok') + '">' + esc(text) + '</div>';
+  }
+
+  function noticeHtml(kind, title, text) {
+    return '<div class="notice ' + (kind === 'error' ? 'error' : 'ok') + '" role="' + (kind === 'error' ? 'alert' : 'status') + '">' +
+      (title ? '<strong>' + esc(title) + '</strong>' : '') + esc(text) + '</div>';
+  }
+
+  // Fetch wrapper: JSON in, JSON out; errors carry the API's {error} message.
+  function api(path, options) {
+    options = options || {};
+    var init = { credentials: 'same-origin', method: options.method || 'GET', headers: { 'Accept': 'application/json' } };
+    if (options.body !== undefined) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
+    return fetch(path, init).then(function (res) {
+      return res.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+        if (!res.ok) {
+          var msg = (data && data.error) ? data.error : 'Não foi possível concluir agora. Tente de novo em instantes.';
+          var err = new Error(msg);
+          err.status = res.status;
+          throw err;
+        }
+        return data;
+      });
+    }, function () {
+      throw new Error('Sem conexão com o servidor. Verifique sua internet e tente de novo.');
+    });
+  }
+
+  function readFileText(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result || '')); };
+      reader.onerror = function () { reject(new Error('Não foi possível ler o arquivo.')); };
+      reader.readAsText(file, 'utf-8');
+    });
+  }
+
+  // ---------- state ----------
+  var state = {
+    templates: null,
+    requests: [],
+    currentRequestId: null,
+    criteria: [],
+    selectedTemplate: null,
+    rejectOpen: false
+  };
+
+  // ---------- navigation ----------
+  var TABS = ['home', 'requests', 'new', 'import'];
+
+  function showTab(name) {
+    TABS.forEach(function (t) {
+      document.getElementById('view-' + t).hidden = (t !== name);
+    });
+    document.querySelectorAll('nav.tabs button').forEach(function (b) {
+      if (b.getAttribute('data-tab') === name) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
+    });
+    setGlobal(null, '');
+    if (name === 'home') loadOverview();
+    if (name === 'requests') { showList(); loadRequests(); }
+    if (name === 'new') loadTemplates();
+  }
+
+  document.querySelector('nav.tabs').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-tab]');
+    if (btn) showTab(btn.getAttribute('data-tab'));
+  });
+
+  // ---------- me ----------
+  function loadMe() {
+    api('/api/portal/me').then(function (me) {
+      document.getElementById('who').innerHTML = 'Conectado como <strong>' + esc(me.email) + '</strong>';
+    }).catch(function (err) {
+      document.getElementById('who').textContent = err.message;
+    });
+  }
+
+  // ---------- início ----------
+  function loadOverview() {
+    var body = document.getElementById('home-body');
+    body.innerHTML = '<p class="loading">Carregando resumo…</p>';
+    api('/api/portal/overview').then(function (o) {
+      var recent = (o.recentDeliveries || []).map(function (d) {
+        return '<li class="panel" style="margin:0 0 10px"><p class="row-title" style="margin:0">' + esc(d.title) + '</p>' +
+          '<p class="row-meta">Entregue em ' + esc(dateBr(d.deliveredAt)) + '</p></li>';
+      }).join('');
+      body.innerHTML =
+        '<div class="cards">' +
+          '<div class="stat"><p class="label">Entregues este mês</p><p class="value">' + esc(o.deliveredThisMonth) + '</p></div>' +
+          '<button type="button" class="stat" data-action="go-requests"><span class="label" style="display:block">Em andamento</span><span class="value" style="display:block">' + esc(o.inProgress) + '</span></button>' +
+          '<button type="button" class="stat" data-action="go-requests"><span class="label" style="display:block">Aguardando você</span><span class="value" style="display:block">' + esc(o.waitingYou) + '</span></button>' +
+          '<div class="stat"><p class="label">Gasto no mês</p><p class="value">' + esc(money(o.spentThisMonth)) + '</p></div>' +
+          '<div class="stat"><p class="label">Tempo médio de entrega</p><p class="value">' +
+            (o.avgDaysToDeliver == null ? '—' : esc(o.avgDaysToDeliver) + (o.avgDaysToDeliver === 1 ? ' dia' : ' dias')) +
+          '</p></div>' +
+        '</div>' +
+        '<h3>Entregas recentes</h3>' +
+        (recent ? '<ul class="list" style="margin-top:10px">' + recent + '</ul>' :
+          '<p class="empty">Nenhuma entrega ainda. Assim que um pedido for entregue, ele aparece aqui.</p>');
+    }).catch(function (err) {
+      body.innerHTML = noticeHtml('error', 'Não deu para carregar o resumo.', err.message);
+    });
+  }
+
+  // ---------- pedidos ----------
+  function showList() {
+    document.getElementById('requests-list-wrap').hidden = false;
+    var d = document.getElementById('request-detail');
+    d.hidden = true;
+    d.innerHTML = '';
+    state.currentRequestId = null;
+  }
+
+  function loadRequests() {
+    var list = document.getElementById('requests-list');
+    list.innerHTML = '<p class="loading">Carregando pedidos…</p>';
+    return api('/api/portal/requests').then(function (items) {
+      state.requests = Array.isArray(items) ? items : [];
+      renderRequests();
+    }).catch(function (err) {
+      list.innerHTML = noticeHtml('error', 'Não deu para carregar os pedidos.', err.message);
+    });
+  }
+
+  function renderRequests() {
+    var list = document.getElementById('requests-list');
+    if (!state.requests.length) {
+      list.innerHTML = '<p class="empty">Você ainda não tem pedidos. Use “Novo pedido” para começar.</p>';
+      return;
+    }
+    // Items that need a decision come first; otherwise keep the server order.
+    var sorted = state.requests.slice().sort(function (a, b) {
+      return (b.needsDecision ? 1 : 0) - (a.needsDecision ? 1 : 0);
+    });
+    list.innerHTML = '<ul class="list">' + sorted.map(function (r) {
+      var meta = [];
+      if (r.area) meta.push(AREA_LABELS[r.area] || r.area);
+      meta.push('Criado em ' + dateBr(r.createdAt));
+      meta.push('Gasto: ' + money(r.spent));
+      return '<li class="' + (r.needsDecision ? 'needs' : '') + '">' +
+        '<button type="button" class="row-btn" data-action="open-request" data-id="' + esc(r.id) + '">' +
+          (r.needsDecision ? '<p class="needs-flag">Precisa da sua decisão</p>' : '') +
+          badge(r.status) +
+          '<p class="row-title">' + esc(r.title) + '</p>' +
+          '<p class="row-meta">' + meta.map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('') + '</p>' +
+          (r.forecast && r.forecast.text ? '<p class="forecast">' + esc(r.forecast.text) + '</p>' : '') +
+        '</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function openRequest(id) {
+    state.currentRequestId = id;
+    state.rejectOpen = false;
+    document.getElementById('requests-list-wrap').hidden = true;
+    var d = document.getElementById('request-detail');
+    d.hidden = false;
+    d.innerHTML = '<p class="loading">Carregando pedido…</p>';
+    renderDetail(id);
+  }
+
+  function renderDetail(id) {
+    var d = document.getElementById('request-detail');
+    return api('/api/portal/requests/' + encodeURIComponent(id)).then(function (r) {
+      if (state.currentRequestId !== id) return; // user navigated away meanwhile
+      var criteria = (r.criteria || []).map(function (c) {
+        return '<li><span class="mark' + (c.done ? ' done' : '') + '" aria-hidden="true">' + (c.done ? '✓' : '') + '</span>' +
+          '<span>' + esc(c.text) + '<span class="muted small"> — ' + (c.done ? 'feito' : 'pendente') + '</span></span></li>';
+      }).join('');
+      var timeline = (r.timeline || []).map(function (t) {
+        return '<li><p class="at">' + esc(dateTimeBr(t.at)) + '</p><p>' + esc(t.text) + '</p></li>';
+      }).join('');
+
+      var decision = '';
+      if (r.needsDecision) {
+        decision = '<div class="decision-box" role="region" aria-label="Decisão necessária">' +
+          '<p><strong>Precisamos da sua decisão</strong></p>' +
+          '<p>' + esc(r.needsDecision.question) + '</p>' +
+          '<div class="btn-row">' + (r.needsDecision.options || []).map(function (o) {
+            var cls = o.decision === 'cancel' ? 'danger' : (o.decision === 'approve' ? '' : 'secondary');
+            return '<button type="button" class="' + cls + '" data-action="decide" data-id="' + esc(r.id) +
+              '" data-decision="' + esc(o.decision) + '">' + esc(o.label) + '</button>';
+          }).join('') + '</div></div>';
+      }
+
+      var proposal = '';
+      if (r.proposal) {
+        proposal = '<div class="decision-box" role="region" aria-label="Proposta do time">' +
+          '<p><strong>Proposta do time</strong></p><p>' + esc(r.proposal.text) + '</p>' +
+          '<div class="btn-row"><button type="button" data-action="confirm" data-id="' + esc(r.id) +
+          '" data-version="' + esc(r.proposal.version) + '">Confirmar e começar</button></div></div>';
+      }
+
+      var accept = '';
+      if (r.canAccept) {
+        accept = '<div class="panel"><h3>A entrega está pronta para você</h3>' +
+          '<p class="muted small">Confira os critérios acima. Se estiver como combinado, aprove. Se não, peça ajustes.</p>' +
+          '<div class="btn-row">' +
+            '<button type="button" data-action="accept" data-id="' + esc(r.id) + '">Aprovar entrega</button>' +
+            '<button type="button" class="secondary" data-action="toggle-reject" aria-expanded="' + (state.rejectOpen ? 'true' : 'false') + '">Pedir ajustes</button>' +
+          '</div>' +
+          (state.rejectOpen ?
+            '<div class="reveal"><label for="reject-reason">O que precisa ser ajustado?</label>' +
+            '<textarea id="reject-reason" rows="3" placeholder="Descreva o que falta ou o que mudar."></textarea>' +
+            '<div class="btn-row"><button type="button" data-action="reject" data-id="' + esc(r.id) + '">Enviar pedido de ajustes</button>' +
+            '<button type="button" class="ghost" data-action="toggle-reject">Cancelar</button></div></div>' : '') +
+          '</div>';
+      }
+
+      d.innerHTML =
+        '<div class="view-head"><button type="button" class="ghost small-btn" data-action="back-list">← Voltar para os pedidos</button>' +
+        '<button type="button" class="ghost small-btn" data-action="refresh-detail" data-id="' + esc(r.id) + '">Atualizar</button></div>' +
+        '<div id="detail-msg"></div>' +
+        '<article class="panel">' +
+          badge(r.status) +
+          '<h2 style="margin-top:8px">' + esc(r.title) + '</h2>' +
+          '<p class="row-meta">' + (r.area ? '<span>' + esc(AREA_LABELS[r.area] || r.area) + '</span>' : '') +
+            '<span>Criado em ' + esc(dateBr(r.createdAt)) + '</span><span>Gasto: ' + esc(money(r.spent)) + '</span></p>' +
+          (r.forecast && r.forecast.text ? '<p class="forecast"><strong>Previsão:</strong> ' + esc(r.forecast.text) + '</p>' : '') +
+        '</article>' +
+        decision + proposal +
+        accept +
+        '<div class="panel"><h3>Critérios de pronto</h3>' +
+          (criteria ? '<ul class="checklist">' + criteria + '</ul>' : '<p class="empty">Nenhum critério definido.</p>') +
+        '</div>' +
+        '<div class="panel"><h3>Linha do tempo</h3>' +
+          (timeline ? '<ol class="timeline">' + timeline + '</ol>' : '<p class="empty">Ainda não há movimentações.</p>') +
+        '</div>';
+    }).catch(function (err) {
+      if (state.currentRequestId !== id) return;
+      d.innerHTML = '<div class="view-head"><button type="button" class="ghost small-btn" data-action="back-list">← Voltar para os pedidos</button></div>' +
+        noticeHtml('error', 'Não deu para abrir este pedido.', err.message);
+    });
+  }
+
+  function detailMsg(kind, text) {
+    var box = document.getElementById('detail-msg');
+    if (box) box.innerHTML = text ? noticeHtml(kind, '', text) : '';
+  }
+
+  function refreshAfterAction(id) {
+    return Promise.all([loadRequests(), renderDetail(id)]);
+  }
+
+  function runAction(id, promise, okText) {
+    detailMsg('ok', '');
+    return promise.then(function () {
+      state.rejectOpen = false;
+      return refreshAfterAction(id).then(function () {
+        if (okText) detailMsg('ok', okText);
+      });
+    }).catch(function (err) {
+      detailMsg('error', err.message);
+    });
+  }
+
+  // ---------- novo pedido ----------
+  function loadTemplates() {
+    if (state.templates) return;
+    api('/api/portal/templates').then(function (list) {
+      state.templates = Array.isArray(list) ? list : [];
+      var sel = document.getElementById('new-template');
+      var byArea = {};
+      state.templates.forEach(function (t) {
+        (byArea[t.area] = byArea[t.area] || []).push(t);
+      });
+      var html = '<option value="">Começar do zero</option>';
+      Object.keys(AREA_LABELS).forEach(function (area) {
+        if (!byArea[area]) return;
+        html += '<optgroup label="' + esc(AREA_LABELS[area]) + '">' + byArea[area].map(function (t) {
+          var extra = t.sensitive === 'lgpd' ? ' (Dados pessoais, LGPD)' : (t.sensitive === 'sigilo' ? ' (Sigiloso)' : '');
+          return '<option value="' + esc(t.id) + '">' + esc(t.title + extra) + '</option>';
+        }).join('') + '</optgroup>';
+      });
+      sel.innerHTML = html;
+    }).catch(function (err) {
+      document.getElementById('new-error').innerHTML = noticeHtml('error', 'Não deu para carregar os modelos.', err.message);
+    });
+  }
+
+  function renderTemplateInfo() {
+    var t = state.selectedTemplate;
+    var box = document.getElementById('template-info');
+    if (!t) { box.innerHTML = '<p class="hint">Sem modelo: você define o título, a descrição e os critérios.</p>'; return; }
+    var badges = '';
+    if (t.sensitive === 'lgpd') badges += '<span class="sens">Dados pessoais (LGPD)</span> ';
+    if (t.sensitive === 'sigilo') badges += '<span class="sens sigilo">Sigiloso</span> ';
+    if (t.irreversible) badges += '<span class="tag">Pede sua autorização antes de agir</span>';
+    box.innerHTML = '<p class="hint" style="margin-top:8px">' + esc(t.summary || '') + '</p>' +
+      (badges ? '<p style="margin-top:6px">' + badges + '</p>' : '');
+  }
+
+  function renderCriteria() {
+    var list = document.getElementById('criteria-list');
+    if (!state.criteria.length) {
+      list.innerHTML = '<li class="muted small">Nenhum critério. Adicione pelo menos um, se quiser acompanhar a entrega.</li>';
+      return;
+    }
+    list.innerHTML = state.criteria.map(function (c, i) {
+      return '<li><input type="text" aria-label="Critério ' + (i + 1) + '" data-idx="' + i + '" value="' + esc(c) + '" maxlength="300">' +
+        '<button type="button" class="danger small-btn" data-action="remove-criterion" data-idx="' + i + '" aria-label="Remover critério ' + (i + 1) + '">Remover</button></li>';
+    }).join('');
+  }
+
+  function showNewError(text) {
+    document.getElementById('new-error').innerHTML = text ? noticeHtml('error', 'Não foi possível enviar.', text) : '';
+  }
+
+  function parseBudget(raw) {
+    var s = String(raw || '').trim();
+    if (!s) return undefined;
+    s = s.replace(/\s/g, '').replace(/^R\$/i, '');
+    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+    var n = Number(s);
+    if (!isFinite(n) || n <= 0) throw new Error('Informe um valor em reais, maior que zero. Exemplo: 2500,00.');
+    return n;
+  }
+
+  // ---------- importar ----------
+  function showImportError(text) {
+    document.getElementById('import-error').innerHTML = text ? noticeHtml('error', 'Não foi possível importar.', text) : '';
+  }
+
+  function renderImportResult(r) {
+    var skipped = Array.isArray(r.skipped) ? r.skipped : [];
+    var table = skipped.length ?
+      '<h3 style="margin-top:14px">Linhas não importadas</h3>' +
+      '<div style="overflow-x:auto"><table class="skipped"><thead><tr><th scope="col">Linha</th><th scope="col">Motivo</th></tr></thead><tbody>' +
+      skipped.map(function (s) {
+        return '<tr><td>' + esc(s.row) + '</td><td>' + esc(s.reason) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '';
+    document.getElementById('import-result').innerHTML =
+      '<div class="panel" style="margin-top:14px"><h3>Importação concluída</h3>' +
+        '<div class="stats-inline">' +
+          '<div class="stat"><p class="label">Importados</p><p class="value">' + esc(r.imported) + '</p></div>' +
+          '<div class="stat"><p class="label">Concluídos</p><p class="value">' + esc(r.done) + '</p></div>' +
+          '<div class="stat"><p class="label">Em aberto</p><p class="value">' + esc(r.open) + '</p></div>' +
+          '<div class="stat"><p class="label">Amostras para estimativa</p><p class="value">' + esc(r.calibrationSamples) + '</p></div>' +
+        '</div>' +
+        '<p class="muted small">As amostras são os itens concluídos que têm estimativa e tempo real. É com elas que as previsões são calibradas.</p>' +
+        (skipped.length ? '<p class="muted small">' + esc(skipped.length) + ' linha(s) foram puladas.</p>' : '<p class="muted small">Nenhuma linha foi pulada.</p>') +
+        table +
+      '</div>';
+  }
+
+  // ---------- event wiring ----------
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+    var id = el.getAttribute('data-id');
+
+    if (action === 'refresh-home') return loadOverview();
+    if (action === 'go-requests') return showTab('requests');
+    if (action === 'refresh-requests') return loadRequests();
+    if (action === 'open-request') return openRequest(id);
+    if (action === 'back-list') { showList(); return loadRequests(); }
+    if (action === 'refresh-detail') return renderDetail(id);
+
+    if (action === 'decide') {
+      var decision = el.getAttribute('data-decision');
+      el.disabled = true;
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/decision', {
+        method: 'POST', body: { decision: decision }
+      }), 'Decisão registrada.');
+    }
+
+    if (action === 'confirm') {
+      el.disabled = true;
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/confirm', {
+        method: 'POST', body: { version: Number(el.getAttribute('data-version')) }
+      }), 'Proposta confirmada. O trabalho pode começar.');
+    }
+
+    if (action === 'accept') {
+      el.disabled = true;
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/accept', { method: 'POST' }),
+        'Entrega aprovada. Obrigado!');
+    }
+
+    if (action === 'toggle-reject') {
+      state.rejectOpen = !state.rejectOpen;
+      return renderDetail(state.currentRequestId);
+    }
+
+    if (action === 'reject') {
+      var ta = document.getElementById('reject-reason');
+      var reason = ta ? ta.value.trim() : '';
+      if (!reason) { detailMsg('error', 'Escreva o que precisa ser ajustado antes de enviar.'); if (ta) ta.focus(); return; }
+      el.disabled = true;
+      return runAction(id, api('/api/portal/requests/' + encodeURIComponent(id) + '/reject', {
+        method: 'POST', body: { reason: reason }
+      }), 'Pedido de ajustes enviado.');
+    }
+
+    if (action === 'add-criterion') {
+      state.criteria.push('');
+      renderCriteria();
+      var inputs = document.querySelectorAll('#criteria-list input');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+      return;
+    }
+
+    if (action === 'remove-criterion') {
+      state.criteria.splice(Number(el.getAttribute('data-idx')), 1);
+      renderCriteria();
+      return;
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (e.target.matches && e.target.matches('#criteria-list input')) {
+      state.criteria[Number(e.target.getAttribute('data-idx'))] = e.target.value;
+    }
+  });
+
+  document.getElementById('new-template').addEventListener('change', function (e) {
+    var id = e.target.value;
+    var t = (state.templates || []).filter(function (x) { return x.id === id; })[0] || null;
+    state.selectedTemplate = t;
+    if (t) {
+      var titleInput = document.getElementById('new-title-input');
+      var descInput = document.getElementById('new-description');
+      if (!titleInput.value.trim()) titleInput.value = t.title;
+      if (!descInput.value.trim()) descInput.value = t.description || '';
+      state.criteria = (t.criteria || []).slice();
+      renderCriteria();
+    }
+    renderTemplateInfo();
+  });
+
+  document.getElementById('new-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    showNewError('');
+    var title = document.getElementById('new-title-input').value.trim();
+    var description = document.getElementById('new-description').value.trim();
+    var criteria = state.criteria.map(function (c) { return String(c).trim(); }).filter(Boolean);
+    var templateId = document.getElementById('new-template').value;
+    var budget;
+
+    if (!title) { showNewError('Dê um título ao pedido.'); document.getElementById('new-title-input').focus(); return; }
+    try { budget = parseBudget(document.getElementById('new-budget').value); }
+    catch (err) { showNewError(err.message); document.getElementById('new-budget').focus(); return; }
+
+    var body = { title: title, description: description, criteria: criteria };
+    if (templateId) body.templateId = templateId;
+    if (budget !== undefined) body.budgetBrl = budget;
+
+    var submit = document.getElementById('new-submit');
+    submit.disabled = true;
+    api('/api/portal/requests', { method: 'POST', body: body }).then(function (created) {
+      // Reset the form, then go to the new request.
+      document.getElementById('new-form').reset();
+      state.selectedTemplate = null;
+      state.criteria = [];
+      renderCriteria();
+      renderTemplateInfo();
+      showTab('requests');
+      setGlobal('ok', 'Pedido enviado. Ele já aparece na lista.');
+      if (created && created.id) openRequest(created.id);
+    }).catch(function (err) {
+      showNewError(err.message);
+    }).then(function () {
+      submit.disabled = false;
+    });
+  });
+
+  document.getElementById('import-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    showImportError('');
+    document.getElementById('import-result').innerHTML = '';
+    var format = document.getElementById('import-format').value;
+    var file = document.getElementById('import-file').files[0];
+    var hoursRaw = document.getElementById('import-hours').value.trim();
+    var hoursPerPoint = hoursRaw ? Number(hoursRaw.replace(',', '.')) : 4;
+
+    if (!file) { showImportError('Escolha um arquivo CSV para importar.'); return; }
+    if (!isFinite(hoursPerPoint) || hoursPerPoint <= 0) { showImportError('Horas por ponto deve ser um número maior que zero.'); return; }
+
+    var submit = document.getElementById('import-submit');
+    submit.disabled = true;
+    readFileText(file).then(function (csv) {
+      return api('/api/portal/import', { method: 'POST', body: { format: format, csv: csv, hoursPerPoint: hoursPerPoint } });
+    }).then(function (result) {
+      renderImportResult(result || {});
+      loadOverview();
+    }).catch(function (err) {
+      showImportError(err.message);
+    }).then(function () {
+      submit.disabled = false;
+    });
+  });
+
+  // ---------- Pedidos list: templates initial load ----------
+  function init() {
+    loadMe();
+    renderCriteria();
+    renderTemplateInfo();
+    loadOverview();
+    loadRequests();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
